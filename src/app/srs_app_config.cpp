@@ -148,6 +148,7 @@ const char* _srs_version = "XCORE-"RTMP_SIG_SRS_SERVER;
 // '\r'
 #define SRS_CR (char)SRS_CONSTS_CR
 
+//判断：空格，\t, \n, \r
 bool is_common_space(char ch)
 {
     return (ch == ' ' || ch == '\t' || ch == SRS_CR || ch == SRS_LF);
@@ -156,7 +157,7 @@ bool is_common_space(char ch)
 SrsConfDirective::SrsConfDirective()
 {
 }
-
+//析构
 SrsConfDirective::~SrsConfDirective()
 {
     std::vector<SrsConfDirective*>::iterator it;
@@ -194,12 +195,14 @@ string SrsConfDirective::arg2()
     return "";
 }
 
+//获取子结构
 SrsConfDirective* SrsConfDirective::at(int index)
 {
     srs_assert(index < (int)directives.size());
     return directives.at(index);
 }
 
+//根据名字获取子结构
 SrsConfDirective* SrsConfDirective::get(string _name)
 {
     std::vector<SrsConfDirective*>::iterator it;
@@ -236,19 +239,22 @@ bool SrsConfDirective::is_stream_caster()
     return name == "stream_caster";
 }
 
+//解析文件
 int SrsConfDirective::parse(SrsConfigBuffer* buffer)
 {
     return parse_conf(buffer, parse_file);
 }
 
 // see: ngx_conf_parse
+//解析配置文件
 int SrsConfDirective::parse_conf(SrsConfigBuffer* buffer, SrsDirectiveType type)
 {
     int ret = ERROR_SUCCESS;
     
     while (true) {
-        std::vector<string> args;
-        int line_start = 0;
+        std::vector<string> args; //解析出来的token
+        int line_start = 0; //所在的行
+        //解析token
         ret = read_token(buffer, args, line_start);
         
         /**
@@ -259,15 +265,17 @@ int SrsConfDirective::parse_conf(SrsConfigBuffer* buffer, SrsDirectiveType type)
         * ERROR_SYSTEM_CONFIG_BLOCK_END         the '}' found
         * ERROR_SYSTEM_CONFIG_EOF               the config file is done
         */
+        //出错
         if (ret == ERROR_SYSTEM_CONFIG_INVALID) {
             return ret;
         }
+        // }
         if (ret == ERROR_SYSTEM_CONFIG_BLOCK_END) {
             if (type != parse_block) {
                 srs_error("line %d: unexpected \"}\", ret=%d", buffer->line, ret);
                 return ret;
             }
-            return ERROR_SUCCESS;
+            return ERROR_SUCCESS; //遇到 } 结尾，正确
         }
         if (ret == ERROR_SYSTEM_CONFIG_EOF) {
             if (type == parse_block) {
@@ -276,7 +284,7 @@ int SrsConfDirective::parse_conf(SrsConfigBuffer* buffer, SrsDirectiveType type)
             }
             return ERROR_SUCCESS;
         }
-        
+        // 没有token
         if (args.empty()) {
             ret = ERROR_SYSTEM_CONFIG_INVALID;
             srs_error("line %d: empty directive. ret=%d", conf_line, ret);
@@ -291,8 +299,8 @@ int SrsConfDirective::parse_conf(SrsConfigBuffer* buffer, SrsDirectiveType type)
         args.erase(args.begin());
         directive->args.swap(args);
         
-        directives.push_back(directive);
-        
+        directives.push_back(directive); //子结构
+        // {
         if (ret == ERROR_SYSTEM_CONFIG_BLOCK_START) {
             if ((ret = directive->parse_conf(buffer, parse_block)) != ERROR_SUCCESS) {
                 return ret;
@@ -304,21 +312,32 @@ int SrsConfDirective::parse_conf(SrsConfigBuffer* buffer, SrsDirectiveType type)
 }
 
 // see: ngx_conf_read_token
+/*
+ * 每次解析出一组相关token就会返回
+ * 1. 遇到{,表明是复杂配置，需要循环调用
+ * 2. 遇到;表示解析简单配置完成
+ * 3. 遇到错误
+ *
+ * token是处在两个相邻空格,换行符,双引号,单引号等之间的字符串
+ *
+ * 逐个扫描每一个字符
+ * */
 int SrsConfDirective::read_token(SrsConfigBuffer* buffer, vector<string>& args, int& line_start)
 {
     int ret = ERROR_SUCCESS;
 
-    char* pstart = buffer->pos;
+    char* pstart = buffer->pos; //临时start
 
-    bool sharp_comment = false;
+    bool sharp_comment = false; //注释 #
     
-    bool d_quoted = false;
-    bool s_quoted = false;
+    bool d_quoted = false; //标志位，已扫描到一个单引号，期待下一个单引号
+    bool s_quoted = false; //标志位，已扫描一个双引号，期待下一个双引号
     
-    bool need_space = false;
-    bool last_space = true;
-    
+    bool need_space = false; //需要位置
+    bool last_space = true; //最后位置
+    //扫描每一个字符，并作出相应的处理
     while (true) {
+        //文件已经读取完了，返回
         if (buffer->empty()) {
             ret = ERROR_SYSTEM_CONFIG_EOF;
             
@@ -332,16 +351,16 @@ int SrsConfDirective::read_token(SrsConfigBuffer* buffer, vector<string>& args, 
         }
         
         char ch = *buffer->pos++;
-        
+        //换行，读下一行
         if (ch == SRS_LF) {
             buffer->line++;
             sharp_comment = false;
         }
-        
+        //为注释
         if (sharp_comment) {
             continue;
         }
-        
+        //需要空格
         if (need_space) {
             if (is_common_space(ch)) {
                 last_space = true;
@@ -349,9 +368,9 @@ int SrsConfDirective::read_token(SrsConfigBuffer* buffer, vector<string>& args, 
                 continue;
             }
             if (ch == ';') {
-                return ERROR_SYSTEM_CONFIG_DIRECTIVE;
+                return ERROR_SYSTEM_CONFIG_DIRECTIVE; //找到了
             }
-            if (ch == '{') {
+            if (ch == '{') { //以 { 开头，有子结构
                 return ERROR_SYSTEM_CONFIG_BLOCK_START;
             }
             srs_error("line %d: unexpected '%c'", buffer->line, ch);
@@ -359,7 +378,9 @@ int SrsConfDirective::read_token(SrsConfigBuffer* buffer, vector<string>& args, 
         }
         
         // last charecter is space.
+        //上一个为空格
         if (last_space) {
+            //又是空格，那么继续
             if (is_common_space(ch)) {
                 continue;
             }
@@ -370,28 +391,28 @@ int SrsConfDirective::read_token(SrsConfigBuffer* buffer, vector<string>& args, 
                         srs_error("line %d: unexpected ';'", buffer->line);
                         return ERROR_SYSTEM_CONFIG_INVALID;
                     }
-                    return ERROR_SYSTEM_CONFIG_DIRECTIVE;
+                    return ERROR_SYSTEM_CONFIG_DIRECTIVE; //解析完毕
                 case '{':
                     if (args.size() == 0) {
                         srs_error("line %d: unexpected '{'", buffer->line);
                         return ERROR_SYSTEM_CONFIG_INVALID;
                     }
-                    return ERROR_SYSTEM_CONFIG_BLOCK_START;
+                    return ERROR_SYSTEM_CONFIG_BLOCK_START; //解析完毕
                 case '}':
                     if (args.size() != 0) {
                         srs_error("line %d: unexpected '}'", buffer->line);
                         return ERROR_SYSTEM_CONFIG_INVALID;
                     }
-                    return ERROR_SYSTEM_CONFIG_BLOCK_END;
-                case '#':
+                    return ERROR_SYSTEM_CONFIG_BLOCK_END; //解析完毕
+                case '#': //为注释
                     sharp_comment = 1;
                     continue;
-                case '"':
+                case '"': //第一个遇到引号
                     pstart++;
                     d_quoted = true;
                     last_space = 0;
                     continue;
-                case '\'':
+                case '\'': //第一次遇到'
                     pstart++;
                     s_quoted = true;
                     last_space = 0;
@@ -407,11 +428,11 @@ int SrsConfDirective::read_token(SrsConfigBuffer* buffer, vector<string>& args, 
             }
             
             bool found = false;
-            if (d_quoted) {
+            if (d_quoted) { //前面出现过 "
                 if (ch == '"') {
                     d_quoted = false;
-                    need_space = true;
-                    found = true;
+                    need_space = true; //引号后面需要空格
+                    found = true; //查找到了
                 }
             } else if (s_quoted) {
                 if (ch == '\'') {
@@ -420,10 +441,10 @@ int SrsConfDirective::read_token(SrsConfigBuffer* buffer, vector<string>& args, 
                     found = true;
                 }
             } else if (is_common_space(ch) || ch == ';' || ch == '{') {
-                last_space = true;
-                found = 1;
+                last_space = true; //为：空格 ; { 这三个，说明已经解析完了，上一个为空格
+                found = 1; //已经找到一个token
             }
-            
+            //如果找到了，就得到一个token
             if (found) {
                 int len = (int)(buffer->pos - pstart);
                 char* aword = new char[len];
@@ -432,14 +453,14 @@ int SrsConfDirective::read_token(SrsConfigBuffer* buffer, vector<string>& args, 
                 
                 string word_str = aword;
                 if (!word_str.empty()) {
-                    args.push_back(word_str);
+                    args.push_back(word_str); //把token出来
                 }
                 srs_freepa(aword);
                 
-                if (ch == ';') {
+                if (ch == ';') { //
                     return ERROR_SYSTEM_CONFIG_DIRECTIVE;
                 }
-                if (ch == '{') {
+                if (ch == '{') { //说明是复杂结构，要继续解析
                     return ERROR_SYSTEM_CONFIG_BLOCK_START;
                 }
             }
@@ -457,11 +478,12 @@ SrsConfig::SrsConfig()
     show_version = false;
     test_conf = false;
     
-    root = new SrsConfDirective();
+    root = new SrsConfDirective(); //构造根的结构’
     root->conf_line = 0;
     root->name = "root";
 }
 
+//析构
 SrsConfig::~SrsConfig()
 {
     srs_freep(root);
@@ -472,9 +494,10 @@ bool SrsConfig::is_dolphin()
     return dolphin;
 }
 
+//设置directive
 void SrsConfig::set_config_directive(SrsConfDirective* parent, string dir, string value)
 {
-    SrsConfDirective* d = parent->get(dir);
+    SrsConfDirective* d = parent->get(dir); //根据路径
     
     if (!d) {
         d = new SrsConfDirective();
@@ -514,6 +537,7 @@ void SrsConfig::unsubscribe(ISrsReloadHandler* handler)
     subscribes.erase(it);
 }
 
+//重载
 int SrsConfig::reload()
 {
     int ret = ERROR_SUCCESS;
@@ -536,6 +560,7 @@ int SrsConfig::reload()
     return reload_conf(&conf);
 }
 
+//重载vhost
 int SrsConfig::reload_vhost(SrsConfDirective* old_root)
 {
     int ret = ERROR_SUCCESS;
@@ -550,7 +575,7 @@ int SrsConfig::reload_vhost(SrsConfDirective* old_root)
     //      ENABLED     =>  ENABLED (modified)
 
     // collect all vhost names
-    std::vector<std::string> vhosts;
+    std::vector<std::string> vhosts; //所有的vhost
     for (int i = 0; i < (int)root->directives.size(); i++) {
         SrsConfDirective* vhost = root->at(i);
         if (vhost->name != "vhost") {
@@ -867,6 +892,7 @@ int SrsConfig::reload_vhost(SrsConfDirective* old_root)
     return ret;
 }
 
+//重载配置文件
 int SrsConfig::reload_conf(SrsConfig* conf)
 {
     int ret = ERROR_SUCCESS;
@@ -1005,6 +1031,7 @@ int SrsConfig::reload_conf(SrsConfig* conf)
     return ret;
 }
 
+//reload http api
 int SrsConfig::reload_http_api(SrsConfDirective* old_root)
 {
     int ret = ERROR_SUCCESS;
@@ -1070,6 +1097,7 @@ int SrsConfig::reload_http_api(SrsConfDirective* old_root)
     return ret;
 }
 
+//reload http stream
 int SrsConfig::reload_http_stream(SrsConfDirective* old_root)
 {
     int ret = ERROR_SUCCESS;
@@ -1144,6 +1172,7 @@ int SrsConfig::reload_http_stream(SrsConfDirective* old_root)
     return ret;
 }
 
+//reload transcode
 int SrsConfig::reload_transcode(SrsConfDirective* new_vhost, SrsConfDirective* old_vhost)
 {
     int ret = ERROR_SUCCESS;
@@ -1363,7 +1392,7 @@ int SrsConfig::parse_options(int argc, char** argv)
         srs_error("config file not specified, see help: %s -h, ret=%d", argv[0], ret);
         return ret;
     }
-
+    //解析配置文件
     ret = parse_file(config_file.c_str());
     
     if (test_conf) {
@@ -1404,6 +1433,7 @@ int SrsConfig::parse_options(int argc, char** argv)
     return ret;
 }
 
+//cwd
 int SrsConfig::initialize_cwd()
 {
     int ret = ERROR_SUCCESS;
@@ -1421,6 +1451,7 @@ string SrsConfig::config()
     return config_file;
 }
 
+//根据参数，显示不同的信息
 int SrsConfig::parse_argv(int& i, char** argv)
 {
     int ret = ERROR_SUCCESS;
@@ -1496,15 +1527,16 @@ int SrsConfig::parse_argv(int& i, char** argv)
     return ret;
 }
 
+//输出帮助
 void SrsConfig::print_help(char** argv)
 {
     printf(
-        RTMP_SIG_SRS_SERVER" "RTMP_SIG_SRS_COPYRIGHT"\n"
-        "License: "RTMP_SIG_SRS_LICENSE"\n"
-        "Primary: "RTMP_SIG_SRS_PRIMARY"\n"
-        "Authors: "RTMP_SIG_SRS_AUTHROS"\n"
-        "Build: "SRS_AUTO_BUILD_DATE" Configuration:"SRS_AUTO_USER_CONFIGURE"\n"
-        "Features:"SRS_AUTO_CONFIGURE"\n""\n"
+        RTMP_SIG_SRS_SERVER" " RTMP_SIG_SRS_COPYRIGHT "\n"
+        "License: " RTMP_SIG_SRS_LICENSE "\n"
+        "Primary: " RTMP_SIG_SRS_PRIMARY "\n"
+        "Authors: " RTMP_SIG_SRS_AUTHROS "\n"
+        "Build: " SRS_AUTO_BUILD_DATE " Configuration:" SRS_AUTO_USER_CONFIGURE "\n"
+        "Features:" SRS_AUTO_CONFIGURE "\n""\n"
         "Usage: %s [-h?vV] [[-t] -c <filename>]\n" 
         "\n"
         "Options:\n"
@@ -1518,15 +1550,16 @@ void SrsConfig::print_help(char** argv)
         "\n"
         RTMP_SIG_SRS_WEB"\n"
         RTMP_SIG_SRS_URL"\n"
-        "Email: "RTMP_SIG_SRS_EMAIL"\n"
+        "Email: " RTMP_SIG_SRS_EMAIL "\n"
         "\n"
         "For example:\n"
         "   %s -v\n"
-        "   %s -t -c "SRS_CONF_DEFAULT_COFNIG_FILE"\n"
-        "   %s -c "SRS_CONF_DEFAULT_COFNIG_FILE"\n",
+        "   %s -t -c " SRS_CONF_DEFAULT_COFNIG_FILE "\n"
+        "   %s -c " SRS_CONF_DEFAULT_COFNIG_FILE "\n",
         argv[0], argv[0], argv[0], argv[0]);
 }
 
+//解析配置文件
 int SrsConfig::parse_file(const char* filename)
 {
     int ret = ERROR_SUCCESS;
@@ -1538,14 +1571,15 @@ int SrsConfig::parse_file(const char* filename)
     }
     
     SrsConfigBuffer buffer;
-    
+    //首先读取到buffer中
     if ((ret = buffer.fullfill(config_file.c_str())) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //然后解析
     return parse_buffer(&buffer);
 }
 
+//检查配置文件
 int SrsConfig::check_config()
 {
     int ret = ERROR_SUCCESS;
@@ -2075,6 +2109,7 @@ int SrsConfig::check_config()
     return ret;
 }
 
+//解析配置文件
 int SrsConfig::parse_buffer(SrsConfigBuffer* buffer)
 {
     int ret = ERROR_SUCCESS;
@@ -4490,6 +4525,7 @@ SrsConfDirective* SrsConfig::get_stats_disk_device()
 
 namespace _srs_internal
 {
+    //构造函数
     SrsConfigBuffer::SrsConfigBuffer()
     {
         line = 1;
@@ -4502,7 +4538,7 @@ namespace _srs_internal
     {
         srs_freepa(start);
     }
-    
+    //读取文件
     int SrsConfigBuffer::fullfill(const char* filename)
     {
         int ret = ERROR_SUCCESS;
@@ -4533,7 +4569,7 @@ namespace _srs_internal
         
         return ret;
     }
-    
+    //判断是否已经读完
     bool SrsConfigBuffer::empty()
     {
         return pos >= end;

@@ -62,7 +62,7 @@ namespace _srs_internal
 * @remark, allow empty directive, for example: "dir0 {}"
 * @remark, don't allow empty name, for example: ";" or "{dir0 arg0;}
 */
-//conf 文件的结构，
+//conf 文件的结构，包含名字和参数列表
 class SrsConfDirective
 {
 public:
@@ -93,7 +93,7 @@ public:
     * 
     * @remark, the directives can contains directives.
     */
-    std::vector<SrsConfDirective*> directives;
+    std::vector<SrsConfDirective*> directives; //子directive
 public:
     SrsConfDirective();
     virtual ~SrsConfDirective();
@@ -1129,20 +1129,29 @@ namespace _srs_internal
     /**
     * the buffer of config content.
     */
+    //配置文件的缓存
+    //当解析配置文件时候,会构造一个buf,来存放从配置文件中读取的数据.
+    /*
+    * buffer中数据为一下：
+    * 未解析字符:已经读入buf中,但是还未进行扫描
+    * 已扫描字符:读入buf中,已经进行分析,但是所有字符不构成一个token.
+    * 已解析字符:字符串可以组成一个token并存入argc中
+    * 空余buf:文件已扫描完,并读入buf中,但是读入buf的内容不够一个buf.
+    * */
     class SrsConfigBuffer
     {
     protected:
         // last available position.
-        char* last;
+        char* last; //未解析的字符串尾部
         // end of buffer.
         char* end;
         // start of buffer.
         char* start;
     public:
         // current consumed position.
-        char* pos;
+        char* pos; //当前解析到的字符串
         // current parsed line.
-        int line;
+        int line; //所在行
     public:
         SrsConfigBuffer();
         virtual ~SrsConfigBuffer();

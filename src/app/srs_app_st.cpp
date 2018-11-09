@@ -198,6 +198,7 @@ bool srs_st_epoll_is_supported(void)
 }
 #endif
 
+//初始化st,linux下使用epoll
 int srs_st_init()
 {
     int ret = ERROR_SUCCESS;
@@ -231,6 +232,7 @@ int srs_st_init()
     return ret;
 }
 
+//关闭fd
 void srs_close_stfd(st_netfd_t& stfd)
 {
     if (stfd) {

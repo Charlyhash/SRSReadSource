@@ -39,6 +39,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * the socket provides TCP socket over st,
  * that is, the sync socket mechanism.
  */
+ //用于接受和发送数据
 class SrsStSocket : public ISrsProtocolReaderWriter
 {
 private:
@@ -72,11 +73,11 @@ public:
 };
 
 // initialize st, requires epoll.
-extern int srs_st_init();
+extern int srs_st_init(); //初始化st
 
 // close the netfd, and close the underlayer fd.
 // @remark when close, user must ensure io completed.
-extern void srs_close_stfd(st_netfd_t& stfd);
+extern void srs_close_stfd(st_netfd_t& stfd); //关闭stfd
 
 #endif
 

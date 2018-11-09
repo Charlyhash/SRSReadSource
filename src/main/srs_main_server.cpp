@@ -53,11 +53,11 @@ int run_master();
 // kernel module.
 //全局的log,context
 ISrsLog* _srs_log = new SrsFastLog();
-ISrsThreadContext* _srs_context = new SrsThreadContext();
+ISrsThreadContext* _srs_context = new SrsThreadContext(); //协程到id映射
 // app module.
 // config和server
-SrsConfig* _srs_config = new SrsConfig();
-SrsServer* _srs_server = new SrsServer();
+SrsConfig* _srs_config = new SrsConfig(); //配置文件
+SrsServer* _srs_server = new SrsServer(); //服务
 // version of srs, which can grep keyword "XCORE"
 extern const char* _srs_version;
 
@@ -282,6 +282,7 @@ int main(int argc, char** argv)
     
     // never use srs log(srs_trace, srs_error, etc) before config parse the option,
     // which will load the log config and apply it.
+    // 解析配置文件
     if ((ret = _srs_config->parse_options(argc, argv)) != ERROR_SUCCESS) {
         return ret;
     }

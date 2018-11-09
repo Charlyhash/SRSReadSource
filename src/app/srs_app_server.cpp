@@ -148,8 +148,9 @@ int SrsStreamListener::listen(string i, int p)
     port = p;
 
     srs_freep(listener);
+    //创建一个listener
     listener = new SrsTcpListener(this, ip, port);
-
+    //调用listen()
     if ((ret = listener->listen()) != ERROR_SUCCESS) {
         srs_error("tcp listen failed. ret=%d", ret);
         return ret;
@@ -164,10 +165,11 @@ int SrsStreamListener::listen(string i, int p)
     return ret;
 }
 
+//连接到来的处理
 int SrsStreamListener::on_tcp_client(st_netfd_t stfd)
 {
     int ret = ERROR_SUCCESS;
-    
+    //server连接
     if ((ret = server->accept_client(type, stfd)) != ERROR_SUCCESS) {
         srs_warn("accept client error. ret=%d", ret);
         return ret;

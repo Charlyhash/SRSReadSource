@@ -73,17 +73,18 @@ namespace internal {
      *       the cycle will invoke util cannot loop, eventhough the return code of cycle is error,
      *       so the interval_us used to sleep for each cycle.
      */
+     //thread handle
     class ISrsThreadHandler
     {
     public:
         ISrsThreadHandler();
         virtual ~ISrsThreadHandler();
     public:
-        virtual void on_thread_start();
-        virtual int on_before_cycle();
-        virtual int cycle() = 0;
-        virtual int on_end_cycle();
-        virtual void on_thread_stop();
+        virtual void on_thread_start(); //启动
+        virtual int on_before_cycle(); //cycle前
+        virtual int cycle() = 0; //cycle
+        virtual int on_end_cycle(); //cycle后
+        virtual void on_thread_stop(); //stop时
     };
     
     /**
@@ -93,17 +94,17 @@ namespace internal {
     class SrsThread
     {
     private:
-        st_thread_t tid;
-        int _cid;
-        bool loop;
-        bool can_run;
-        bool really_terminated;
-        bool _joinable;
-        const char* _name;
-        bool disposed;
+        st_thread_t tid; //tid
+        int _cid; //cid
+        bool loop; //是否支持loop
+        bool can_run; //是否能run
+        bool really_terminated; //是否terminate
+        bool _joinable; //是否joinable
+        const char* _name; //协程名字
+        bool disposed; //是否dispose
     private:
-        ISrsThreadHandler* handler;
-        int64_t cycle_interval_us;
+        ISrsThreadHandler* handler; //回调处理
+        int64_t cycle_interval_us; //循环时间us
     public:
         /**
          * initialize the thread.
@@ -127,7 +128,7 @@ namespace internal {
          * used for parent thread to get the id.
          * @remark when start thread, parent thread will block and wait for this id ready.
          */
-        virtual int cid();
+        virtual int cid(); //获取cid
         /**
          * start the thread, invoke the cycle of handler util
          * user stop the thread.
@@ -135,29 +136,29 @@ namespace internal {
          * @remark user can start multiple times, ignore if already started.
          * @remark wait for the cid is set by thread pfn.
          */
-        virtual int start();
+        virtual int start(); //启动线程
         /**
          * stop the thread, wait for the thread to terminate.
          * @remark user can stop multiple times, ignore if already stopped.
          */
-        virtual void stop();
+        virtual void stop(); //暂停线程
     public:
         /**
          * whether the thread should loop,
          * used for handler->cycle() which has a loop method,
          * to check this method, break if false.
          */
-        virtual bool can_loop();
+        virtual bool can_loop(); //是否能loop
         /**
          * for the loop thread to stop the loop.
          * other thread can directly use stop() to stop loop and wait for quit.
          * this stop loop method only set loop to false.
          */
-        virtual void stop_loop();
+        virtual void stop_loop(); //停止loop
     private:
-        virtual void dispose();
-        virtual void thread_cycle();
-        static void* thread_fun(void* arg);
+        virtual void dispose(); //释放
+        virtual void thread_cycle(); //线程循环
+        static void* thread_fun(void* arg); //线程循环调用的函数
     };
 }
 

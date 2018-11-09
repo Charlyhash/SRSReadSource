@@ -55,7 +55,14 @@ namespace internal {
     void ISrsThreadHandler::on_thread_stop()
     {
     }
-    
+
+    /*
+     * 线程的构造函数
+     * name：函数名
+     * thread_handle：线程处理函数
+     * interval_us: 休眠时长
+     * joinalbe: 是否能join
+     * */
     SrsThread::SrsThread(const char* name, ISrsThreadHandler* thread_handler, int64_t interval_us, bool joinable)
     {
         _name = name;
@@ -75,7 +82,7 @@ namespace internal {
         // thread will set _cid, callback on_thread_start(), then wait for the can_run signal.
         can_run = false;
     }
-    
+    //析构函数，调用stop
     SrsThread::~SrsThread()
     {
         stop();

@@ -43,19 +43,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 * st thread context, get_id will get the st-thread id, 
 * which identify the client.
 */
+//st协程的上下文
 class SrsThreadContext : public ISrsThreadContext
 {
 private:
-    std::map<st_thread_t, int> cache;
+    std::map<st_thread_t, int> cache; //缓存线程到到st-thread id的map
 public:
     SrsThreadContext();
     virtual ~SrsThreadContext();
 public:
-    virtual int generate_id();
-    virtual int get_id();
-    virtual int set_id(int v);
+    virtual int generate_id(); //生成
+    virtual int get_id(); //获取
+    virtual int set_id(int v); //设置
 public:
-    virtual void clear_cid();
+    virtual void clear_cid(); //清除
 };
 
 /**

@@ -58,6 +58,7 @@ class SrsAppCasterFlv;
 
 // listener type for server to identify the connection,
 // that is, use different type to process the connection.
+//监听类型
 enum SrsListenerType 
 {
     // RTMP client,
@@ -77,37 +78,39 @@ enum SrsListenerType
 /**
 * the common tcp listener, for RTMP/HTTP server.
 */
+//listener
 class SrsListener
 {
 protected:
-    SrsListenerType type;
+    SrsListenerType type; //类型
 protected:
-    std::string ip;
-    int port;
-    SrsServer* server;
+    std::string ip; //ip
+    int port; //端口
+    SrsServer* server; //所属的服务
 public:
     SrsListener(SrsServer* svr, SrsListenerType t);
     virtual ~SrsListener();
 public:
     virtual SrsListenerType listen_type();
-    virtual int listen(std::string i, int p) = 0;
+    virtual int listen(std::string i, int p) = 0; //监听
 };
 
 /**
 * tcp listener.
 */
+//tcp监听
 class SrsStreamListener : virtual public SrsListener, virtual public ISrsTcpHandler
 {
 private:
-    SrsTcpListener* listener;
+    SrsTcpListener* listener; //包含一个监听
 public:
     SrsStreamListener(SrsServer* server, SrsListenerType type);
     virtual ~SrsStreamListener();
 public:
-    virtual int listen(std::string ip, int port);
+    virtual int listen(std::string ip, int port); //listen
 // ISrsTcpHandler
 public:
-    virtual int on_tcp_client(st_netfd_t stfd);
+    virtual int on_tcp_client(st_netfd_t stfd); //连接到来的处理
 };
 
 #ifdef SRS_AUTO_STREAM_CASTER
@@ -209,6 +212,7 @@ private:
 /**
 * the handler to the handle cycle in SRS RTMP server.
 */
+//服务循环
 class ISrsServerCycle
 {
 public:
@@ -229,6 +233,7 @@ public:
 * SRS RTMP server, initialize and listen, 
 * start connection service thread, destroy client.
 */
+//SRS RTMP server类：初始化，监听，启动连接服务现场，销毁客户端连接
 class SrsServer : virtual public ISrsReloadHandler
     , virtual public ISrsSourceHandler
     , virtual public IConnectionManager
@@ -236,16 +241,16 @@ class SrsServer : virtual public ISrsReloadHandler
 private:
 #ifdef SRS_AUTO_HTTP_API
     // TODO: FIXME: rename to http_api
-    SrsHttpServeMux* http_api_mux;
+    SrsHttpServeMux* http_api_mux; //http api
 #endif
 #ifdef SRS_AUTO_HTTP_SERVER
-    SrsHttpServer* http_server;
+    SrsHttpServer* http_server; //http server
 #endif
 #ifdef SRS_AUTO_HTTP_CORE
     SrsHttpHeartbeat* http_heartbeat;
 #endif
 #ifdef SRS_AUTO_INGEST
-    SrsIngester* ingester;
+    SrsIngester* ingester; ////推流给SRS服务器
 #endif
 private:
     /**
@@ -254,26 +259,27 @@ private:
     *       for the server never delete the file; when system startup, the pid in pid file
     *       maybe valid but the process is not SRS, the init.d script will never start server.
     */
-    int pid_fd;
+    int pid_fd;//pid文件的fd
     /**
     * all connections, connection manager
     */
-    std::vector<SrsConnection*> conns;
+    std::vector<SrsConnection*> conns; //所有的连接
     /**
     * all listners, listener manager.
     */
-    std::vector<SrsListener*> listeners;
+    std::vector<SrsListener*> listeners; //所有的监听
     /**
     * signal manager which convert gignal to io message.
     */
-    SrsSignalManager* signal_manager;
+    SrsSignalManager* signal_manager; //信号管理
     /**
     * handle in server cycle.
     */
-    ISrsServerCycle* handler;
+    ISrsServerCycle* handler; //循环的handler
     /**
     * user send the signal, convert to variable.
     */
+    //信号转为bool值
     bool signal_reload;
     bool signal_gmc_stop;
     bool signal_gracefully_quit;
@@ -288,27 +294,27 @@ private:
     * if not destroy global/static data, the gmc will warning memory leak.
     * in service, server never destroy, directly exit when restart.
     */
-    virtual void destroy();
+    virtual void destroy();//销毁
     /**
      * when SIGTERM, SRS should do cleanup, for example, 
      * to stop all ingesters, cleanup HLS and dvr.
      */
-    virtual void dispose();
+    virtual void dispose();//清理
 // server startup workflow, @see run_master()
 public:
     /**
      * initialize server with callback handler.
      * @remark user must free the cycle handler.
      */
-    virtual int initialize(ISrsServerCycle* cycle_handler);
-    virtual int initialize_st();
-    virtual int initialize_signal();
-    virtual int acquire_pid_file();
-    virtual int listen();
-    virtual int register_signal();
-    virtual int http_handle();
-    virtual int ingest();
-    virtual int cycle();
+    virtual int initialize(ISrsServerCycle* cycle_handler);//初始化server
+    virtual int initialize_st();//初始化st
+    virtual int initialize_signal();//初始化信号
+    virtual int acquire_pid_file();// 获取pid并写入文件
+    virtual int listen();//开始监听
+    virtual int register_signal();//注册信号
+    virtual int http_handle();//http处理
+    virtual int ingest();//其他流包装为rtmp相关
+    virtual int cycle();//循环
 // IConnectionManager
 public:
     /**
@@ -316,6 +322,7 @@ public:
     * when connection thread cycle terminated, callback this to delete connection.
     * @see SrsConnection.on_thread_stop().
     */
+    //移除连接
     virtual void remove(SrsConnection* conn);
 // server utilities.
 public:
@@ -329,6 +336,7 @@ public:
     *       no gmc, directly exit.
     *       for gmc, set the variable signal_gmc_stop, the cycle will return and cleanup for gmc.
     */
+    //由signal manager类调用，signal manager将信号转为message
     virtual void on_signal(int signo);
 private:
     /**
@@ -336,10 +344,11 @@ private:
     * update the global static data, for instance, the current time,
     * the cpu/mem/network statistic.
     */
-    virtual int do_cycle();
+    virtual int do_cycle(); //server线程的主循环，更新系统统计信息
     /**
     * listen at specified protocol.
     */
+    //监听各种协议流
     virtual int listen_rtmp();
     virtual int listen_http_api();
     virtual int listen_http_stream();
@@ -348,11 +357,11 @@ private:
     * close the listeners for specified type, 
     * remove the listen object from manager.
     */
-    virtual void close_listeners(SrsListenerType type);
+    virtual void close_listeners(SrsListenerType type); //关闭监听
     /**
     * resample the server kbs.
     */
-    virtual void resample_kbps();
+    virtual void resample_kbps(); //获取server的kbps
 // internal only
 public:
     /**
@@ -361,9 +370,11 @@ public:
     *       for instance RTMP connection to serve client.
     * @param client_stfd, the client fd in st boxed, the underlayer fd.
     */
+    //接受连接
     virtual int accept_client(SrsListenerType type, st_netfd_t client_stfd);
 // interface ISrsReloadHandler.
 public:
+    //reload
     virtual int on_reload_listen();
     virtual int on_reload_pid();
     virtual int on_reload_vhost_added(std::string vhost);
@@ -375,6 +386,7 @@ public:
     virtual int on_reload_http_stream_updated();
 // interface ISrsSourceHandler
 public:
+    //publish流
     virtual int on_publish(SrsSource* s, SrsRequest* r);
     virtual void on_unpublish(SrsSource* s, SrsRequest* r);
 };

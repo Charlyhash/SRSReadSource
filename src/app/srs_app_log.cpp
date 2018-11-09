@@ -45,7 +45,7 @@ SrsThreadContext::~SrsThreadContext()
 
 int SrsThreadContext::generate_id()
 {
-    static int id = 100;
+    static int id = 100; //默认100开始
     
     int gid = id++;
     cache[st_thread_self()] = gid;
