@@ -362,6 +362,7 @@ SrsUdpCasterListener::~SrsUdpCasterListener()
 }
 #endif
 
+//全局的instance
 SrsSignalManager* SrsSignalManager::instance = NULL;
 
 SrsSignalManager::SrsSignalManager(SrsServer* server)
@@ -370,6 +371,7 @@ SrsSignalManager::SrsSignalManager(SrsServer* server)
     
     _server = server;
     sig_pipe[0] = sig_pipe[1] = -1;
+    //创建协程
     pthread = new SrsEndlessThread("signal", this);
     signal_read_stfd = NULL;
 }
@@ -388,17 +390,19 @@ SrsSignalManager::~SrsSignalManager()
     srs_freep(pthread);
 }
 
+//初始化
 int SrsSignalManager::initialize()
 {
     int ret = ERROR_SUCCESS;
     
     /* Create signal pipe */
+    //创建pipe
     if (pipe(sig_pipe) < 0) {
         ret = ERROR_SYSTEM_CREATE_PIPE;
         srs_error("create signal manager pipe failed. ret=%d", ret);
         return ret;
     }
-    
+    //打开读端，转为stfd
     if ((signal_read_stfd = st_netfd_open(sig_pipe[0])) == NULL) {
         ret = ERROR_SYSTEM_CREATE_PIPE;
         srs_error("create signal manage st pipe failed. ret=%d", ret);
@@ -408,6 +412,7 @@ int SrsSignalManager::initialize()
     return ret;
 }
 
+//启动信号管理
 int SrsSignalManager::start()
 {
     /**
@@ -418,6 +423,7 @@ int SrsSignalManager::start()
     struct sigaction sa;
     
     /* Install sig_catcher() as a signal handler */
+    //设置信号处理函数并添加到监听信号里
     sa.sa_handler = SrsSignalManager::sig_catcher;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
@@ -439,7 +445,7 @@ int SrsSignalManager::start()
     sigaction(SIGUSR2, &sa, NULL);
     
     srs_trace("signal installed");
-    
+    //启动协程，调用cycle()函数
     return pthread->start();
 }
 
@@ -450,6 +456,7 @@ int SrsSignalManager::cycle()
     int signo;
     
     /* Read the next signal from the pipe */
+    //从pipe中读取信号，并处理
     st_read(signal_read_stfd, &signo, sizeof(int), ST_UTIME_NO_TIMEOUT);
     
     /* Process signal synchronously */
@@ -458,6 +465,7 @@ int SrsSignalManager::cycle()
     return ret;
 }
 
+//信号处理函数，写入到pipe中
 void SrsSignalManager::sig_catcher(int signo)
 {
     int err;
@@ -619,7 +627,7 @@ int SrsServer::initialize_st()
 {
     int ret = ERROR_SUCCESS;
     
-    // init st
+    // 初始化st
     if ((ret = srs_st_init()) != ERROR_SUCCESS) {
         srs_error("init st failed. ret=%d", ret);
         return ret;
@@ -657,6 +665,7 @@ int SrsServer::initialize_signal()
     return signal_manager->initialize();
 }
 
+//将pid写入到文件
 int SrsServer::acquire_pid_file()
 {
     int ret = ERROR_SUCCESS;
@@ -861,6 +870,7 @@ int SrsServer::ingest()
     return ret;
 }
 
+//服务的循环，调用do_cycle()
 int SrsServer::cycle()
 {
     int ret = ERROR_SUCCESS;
@@ -913,6 +923,7 @@ void SrsServer::remove(SrsConnection* conn)
     srs_freep(conn);
 }
 
+//服务队信号进行处理
 void SrsServer::on_signal(int signo)
 {
     if (signo == SIGNAL_RELOAD) {
@@ -962,20 +973,23 @@ int SrsServer::do_cycle()
     bool asprocess = _srs_config->get_asprocess();
     
     // the deamon thread, update the time cache
+    //服务器的进程：执行的服务状态的监控
     while (true) {
+        //这里handle为NULL
         if(handler && (ret = handler->on_cycle((int)conns.size())) != ERROR_SUCCESS){
             srs_error("cycle handle failed. ret=%d", ret);
             return ret;
         }
             
-        // the interval in config.
+        // the interval in config.  9.9
         int heartbeat_max_resolution = (int)(_srs_config->get_heartbeat_interval() / SRS_SYS_CYCLE_INTERVAL);
         
-        // dynamic fetch the max.
+        // dynamic fetch the max. 1
         int temp_max = max;
         temp_max = srs_max(temp_max, heartbeat_max_resolution);
         
         for (int i = 0; i < temp_max; i++) {
+            //主线程休眠，让出CPU，其他线程如conn接受连接
             st_usleep(SRS_SYS_CYCLE_INTERVAL * 1000);
             
             // asprocess check.
@@ -985,6 +999,7 @@ int SrsServer::do_cycle()
             }
             
             // gracefully quit for SIGINT or SIGTERM.
+            //收到退出信号，返回
             if (signal_gracefully_quit) {
                 srs_trace("cleanup for gracefully terminate.");
                 return ret;
@@ -1006,7 +1021,7 @@ int SrsServer::do_cycle()
             if (signal_reload) {
                 signal_reload = false;
                 srs_info("get signal reload, to reload the config.");
-                
+                //reload
                 if ((ret = _srs_config->reload()) != ERROR_SUCCESS) {
                     srs_error("reload config failed. ret=%d", ret);
                     return ret;
@@ -1019,12 +1034,12 @@ int SrsServer::do_cycle()
                 return ret;
             }
             
-            // update the cache time
+            // update the cache time 更新时间缓存
             if ((i % SRS_SYS_TIME_RESOLUTION_MS_TIMES) == 0) {
                 srs_info("update current time cache.");
                 srs_update_system_time_ms();
             }
-            
+            //更新一些统计信息
 #ifdef SRS_AUTO_STAT
             if ((i % SRS_SYS_RUSAGE_RESOLUTION_TIMES) == 0) {
                 srs_info("update resource info, rss.");
@@ -1054,6 +1069,7 @@ int SrsServer::do_cycle()
                 srs_info("update network server kbps info.");
                 resample_kbps();
             }
+            //http heartbeat
     #ifdef SRS_AUTO_HTTP_CORE
             if (_srs_config->get_heartbeat_enabled()) {
                 if ((i % heartbeat_max_resolution) == 0) {

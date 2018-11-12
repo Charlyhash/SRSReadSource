@@ -73,14 +73,16 @@ namespace internal {
      *       the cycle will invoke util cannot loop, eventhough the return code of cycle is error,
      *       so the interval_us used to sleep for each cycle.
      */
-     //thread handle
+    /*
+     * 线程处理类，定制线程启动的回调函数
+     * */
     class ISrsThreadHandler
     {
     public:
         ISrsThreadHandler();
         virtual ~ISrsThreadHandler();
     public:
-        virtual void on_thread_start(); //启动
+        virtual void on_thread_start(); //线程启动
         virtual int on_before_cycle(); //cycle前
         virtual int cycle() = 0; //cycle
         virtual int on_end_cycle(); //cycle后
@@ -88,9 +90,12 @@ namespace internal {
     };
     
     /**
-     * provides servies from st_thread_t,
+     * provides service from st_thread_t,
      * for common thread usage.
      */
+     /*
+      * 协程的封装，作为内部使用的类
+      * */
     class SrsThread
     {
     private:
@@ -120,6 +125,7 @@ namespace internal {
          * TODO: FIXME: maybe all thread must be reap by others threads,
          * @see: https://github.com/ossrs/srs/issues/77
          */
+         //初始化协程
         SrsThread(const char* name, ISrsThreadHandler* thread_handler, int64_t interval_us, bool joinable);
         virtual ~SrsThread();
     public:
@@ -176,6 +182,7 @@ namespace internal {
  *          }
  * @remark user must use block method in cycle method, for example, sleep or socket io.
  */
+ //永不退出协程的处理类
 class ISrsEndlessThreadHandler
 {
 public:
@@ -197,11 +204,13 @@ public:
     virtual int on_end_cycle();
     virtual void on_thread_stop();
 };
+
+//永不退出的协程
 class SrsEndlessThread : public internal::ISrsThreadHandler
 {
 private:
-    internal::SrsThread* pthread;
-    ISrsEndlessThreadHandler* handler;
+    internal::SrsThread* pthread; //包含一个协程封装类
+    ISrsEndlessThreadHandler* handler; //协程处理类
 public:
     SrsEndlessThread(const char* n, ISrsEndlessThreadHandler* h);
     virtual ~SrsEndlessThread();
@@ -209,10 +218,10 @@ public:
     /**
      * for the endless thread, never quit.
      */
-    virtual int start();
+    virtual int start(); //启动
 // interface internal::ISrsThreadHandler
 public:
-    virtual int cycle();
+    virtual int cycle(); //执行的循环
     virtual void on_thread_start();
     virtual int on_before_cycle();
     virtual int on_end_cycle();
@@ -242,6 +251,7 @@ public:
  *               }
  *           };
  */
+ //一次循环的thread, 在cycle()完后自己退出
 class ISrsOneCycleThreadHandler
 {
 public:
@@ -301,6 +311,7 @@ public:
  *               }
  *           };
  */
+ //可以重复使用的thread, 被其他thread启动和停止
 class ISrsReusableThreadHandler
 {
 public:
@@ -360,7 +371,7 @@ public:
 /**
  * the reuse thread is a thread stop and start by other thread.
  * the version 2, is the thread cycle has its inner loop, which should
- * check the intterrupt, and should interrupt thread when the inner loop want
+ * check the interrupt, and should interrupt thread when the inner loop want
  * to quit the thread.
  *       user can create thread and stop then start again and again,
  *       generally must provides a start and stop method, @see SrsIngester.
@@ -406,6 +417,7 @@ public:
     virtual int on_end_cycle();
     virtual void on_thread_stop();
 };
+//需要在循环里检查错误
 class SrsReusableThread2 : public internal::ISrsThreadHandler
 {
 private:

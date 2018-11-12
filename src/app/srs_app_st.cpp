@@ -215,13 +215,14 @@ int srs_st_init()
     
     // Select the best event system available on the OS. In Linux this is
     // epoll(). On BSD it will be kqueue.
+    //设置为epoll模式
     if (st_set_eventsys(ST_EVENTSYS_ALT) == -1) {
         ret = ERROR_ST_SET_EPOLL;
         srs_error("st_set_eventsys use %s failed. ret=%d", st_get_eventsys_name(), ret);
         return ret;
     }
     srs_trace("st_set_eventsys to %s", st_get_eventsys_name());
-
+    //初始协程
     if(st_init() != 0){
         ret = ERROR_ST_INITIALIZE;
         srs_error("st_init failed. ret=%d", ret);

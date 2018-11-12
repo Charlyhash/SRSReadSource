@@ -182,31 +182,32 @@ public:
 * convert signal to io,
 * @see: st-1.9/docs/notes.html
 */
+//信号管理类，继承ISrsEndlessThreadHandler
 class SrsSignalManager : public ISrsEndlessThreadHandler
 {
 private:
     /* Per-process pipe which is used as a signal queue. */
     /* Up to PIPE_BUF/sizeof(int) signals can be queued up. */
-    int sig_pipe[2];
-    st_netfd_t signal_read_stfd;
+    int sig_pipe[2]; //用于写入的管道
+    st_netfd_t signal_read_stfd; //读取的fd封装为stfd
 private:
-    SrsServer* _server;
-    SrsEndlessThread* pthread;
+    SrsServer* _server; //所属的server
+    SrsEndlessThread* pthread; //协程
 public:
     SrsSignalManager(SrsServer* server);
     virtual ~SrsSignalManager();
 public:
-    virtual int initialize();
-    virtual int start();
+    virtual int initialize(); //初始化
+    virtual int start(); //启动协程
 // interface ISrsEndlessThreadHandler.
 public:
-    virtual int cycle();
+    virtual int cycle(); //循环
 private:
     // global singleton instance
-    static SrsSignalManager* instance;
+    static SrsSignalManager* instance; //全局的单例
     /* Signal catching function. */
     /* Converts signal event to I/O event. */
-    static void sig_catcher(int signo);
+    static void sig_catcher(int signo); //将信号事件转为io
 };
 
 /**

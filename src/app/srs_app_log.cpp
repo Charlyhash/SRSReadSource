@@ -42,7 +42,7 @@ SrsThreadContext::SrsThreadContext()
 SrsThreadContext::~SrsThreadContext()
 {
 }
-
+//生成全局id
 int SrsThreadContext::generate_id()
 {
     static int id = 100; //默认100开始
@@ -51,12 +51,12 @@ int SrsThreadContext::generate_id()
     cache[st_thread_self()] = gid;
     return gid;
 }
-
+//获取本协程的id
 int SrsThreadContext::get_id()
 {
     return cache[st_thread_self()];
 }
-
+//设置协程id
 int SrsThreadContext::set_id(int v)
 {
     st_thread_t self = st_thread_self();
@@ -70,7 +70,7 @@ int SrsThreadContext::set_id(int v)
     
     return ov;
 }
-
+//清理id
 void SrsThreadContext::clear_cid()
 {
     st_thread_t self = st_thread_self();

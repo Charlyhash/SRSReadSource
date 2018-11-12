@@ -92,7 +92,7 @@ namespace internal {
     {
         return _cid;
     }
-    
+    //启动一个协程
     int SrsThread::start()
     {
         int ret = ERROR_SUCCESS;
@@ -101,16 +101,16 @@ namespace internal {
             srs_info("thread %s already running.", _name);
             return ret;
         }
-        
+        //创建协程，调用thread_fun
         if((tid = st_thread_create(thread_fun, this, (_joinable? 1:0), 0)) == NULL){
             ret = ERROR_ST_CREATE_CYCLE_THREAD;
             srs_error("st_thread_create failed. ret=%d", ret);
             return ret;
         }
-        
+        //是否dispose
         disposed = false;
         // we set to loop to true for thread to run.
-        loop = true;
+        loop = true; //loop为true
         
         // wait for cid to ready, for parent thread to get the cid.
         while (_cid < 0) {
@@ -122,16 +122,17 @@ namespace internal {
         
         return ret;
     }
-    
+
+    //停止一个协程
     void SrsThread::stop()
     {
         if (!tid) {
             return;
         }
         
-        loop = false;
+        loop = false; //loop为false, 那么不会继续执行cycle()
         
-        dispose();
+        dispose(); //释放协程
         
         _cid = -1;
         can_run = false;
@@ -147,7 +148,8 @@ namespace internal {
     {
         loop = false;
     }
-    
+
+    //清理
     void SrsThread::dispose()
     {
         if (disposed) {
@@ -183,18 +185,19 @@ namespace internal {
         
         disposed = true;
     }
-    
+
+    //协程的循环
     void SrsThread::thread_cycle()
     {
         int ret = ERROR_SUCCESS;
         
-        _srs_context->generate_id();
+        _srs_context->generate_id(); //生成cid
         srs_info("thread %s cycle start", _name);
         
         _cid = _srs_context->get_id();
         
         srs_assert(handler);
-        handler->on_thread_start();
+        handler->on_thread_start(); //调用handle的on_thread_start
         
         // thread is running now.
         really_terminated = false;
@@ -203,7 +206,7 @@ namespace internal {
         while (!can_run && loop) {
             st_usleep(10 * 1000);
         }
-        
+        //正在的loop，loop里执行函数为：on_before_cycle->cycle->on_end_cycle
         while (loop) {
             if ((ret = handler->on_before_cycle()) != ERROR_SUCCESS) {
                 srs_warn("thread %s on before cycle failed, ignored and retry, ret=%d", _name, ret);
@@ -237,19 +240,20 @@ namespace internal {
             }
         }
         
-        // readly terminated now.
+        // really terminated now.
         really_terminated = true;
         
-        handler->on_thread_stop();
+        handler->on_thread_stop();//停止时的回调
         srs_info("thread %s cycle finished", _name);
     }
-    
+
+    //协程执行的函数
     void* SrsThread::thread_fun(void* arg)
     {
         SrsThread* obj = (SrsThread*)arg;
         srs_assert(obj);
         
-        obj->thread_cycle();
+        obj->thread_cycle(); //调用cycle函数
         
         // for valgrind to detect.
         SrsThreadContext* ctx = dynamic_cast<SrsThreadContext*>(_srs_context);
@@ -257,7 +261,7 @@ namespace internal {
             ctx->clear_cid();
         }
         
-        st_thread_exit(NULL);
+        st_thread_exit(NULL); //退出协程
         
         return NULL;
     }
@@ -289,18 +293,19 @@ void ISrsEndlessThreadHandler::on_thread_stop()
 {
 }
 
+//构造函数，n:协程的名字，h:协程的处理函数
 SrsEndlessThread::SrsEndlessThread(const char* n, ISrsEndlessThreadHandler* h)
 {
     handler = h;
-    pthread = new internal::SrsThread(n, this, 0, false);
+    pthread = new internal::SrsThread(n, this, 0, false); //创建一个协程
 }
-
+//析构函数，停止协程，并释放协程指针
 SrsEndlessThread::~SrsEndlessThread()
 {
     pthread->stop();
     srs_freep(pthread);
 }
-
+//启动，调用协程的start()
 int SrsEndlessThread::start()
 {
     return pthread->start();
@@ -374,6 +379,7 @@ int SrsOneCycleThread::start()
     return pthread->start();
 }
 
+//执行完handler->cycle()后，调用stop_loop，退出
 int SrsOneCycleThread::cycle()
 {
     int ret = handler->cycle();
@@ -427,6 +433,7 @@ void ISrsReusableThreadHandler::on_thread_stop()
 {
 }
 
+//构造函数，传入名字，处理类以及时间间隔
 SrsReusableThread::SrsReusableThread(const char* n, ISrsReusableThreadHandler* h, int64_t interval_us)
 {
     handler = h;
@@ -443,7 +450,7 @@ int SrsReusableThread::start()
 {
     return pthread->start();
 }
-
+//可以调用stop
 void SrsReusableThread::stop()
 {
     pthread->stop();
@@ -532,6 +539,7 @@ int SrsReusableThread2::cid()
     return pthread->cid();
 }
 
+//多了interrupt
 void SrsReusableThread2::interrupt()
 {
     pthread->stop_loop();

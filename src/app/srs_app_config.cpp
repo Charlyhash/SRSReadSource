@@ -2225,6 +2225,7 @@ bool SrsConfig::get_utc_time()
 }
 
 string SrsConfig::get_work_dir() {
+    //默认为当前路径
     static string DEFAULT = "./";
     
     SrsConfDirective* conf = root->get("work_dir");

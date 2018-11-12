@@ -385,35 +385,35 @@ int run()
 int run_master()
 {
     int ret = ERROR_SUCCESS;
-    
+    //初始化协程
     if ((ret = _srs_server->initialize_st()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //初始化信号
     if ((ret = _srs_server->initialize_signal()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //获取pid，写入文件
     if ((ret = _srs_server->acquire_pid_file()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //开始监听
     if ((ret = _srs_server->listen()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //注册信号
     if ((ret = _srs_server->register_signal()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //处理http
     if ((ret = _srs_server->http_handle()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //推流
     if ((ret = _srs_server->ingest()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //服务循环
     if ((ret = _srs_server->cycle()) != ERROR_SUCCESS) {
         return ret;
     }
