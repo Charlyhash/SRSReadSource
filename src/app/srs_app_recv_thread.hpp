@@ -207,6 +207,7 @@ public:
 // interface IMergeReadHandler
 public:
 #ifdef SRS_PERF_MERGED_READ
+    //用于合并读
     virtual void on_read(ssize_t nread);
 #endif
 // interface ISrsReloadHandler

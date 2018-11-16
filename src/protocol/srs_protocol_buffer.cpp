@@ -80,6 +80,7 @@ char* SrsFastBuffer::bytes()
     return p;
 }
 
+//设置buffer大小
 void SrsFastBuffer::set_buffer(int buffer_size)
 {
     // never exceed the max size.
@@ -99,7 +100,7 @@ void SrsFastBuffer::set_buffer(int buffer_size)
     // realloc for buffer change bigger.
     int start = (int)(p - buffer);
     int nb_bytes = (int)(end - p);
-    
+    //重新申请buffer,并设置当前buffer位置
     buffer = (char*)realloc(buffer, nb_resize_buf);
     nb_buffer = nb_resize_buf;
     p = buffer + start;
@@ -145,7 +146,7 @@ int SrsFastBuffer::grow(ISrsBufferReader* reader, int required_size)
 
     // the free space of buffer, 
     //      buffer = consumed_bytes + exists_bytes + free_space.
-    int nb_free_space = (int)(buffer + nb_buffer - end);
+    int nb_free_space = (int)(buffer + nb_buffer - end); //剩余可用buffer
     
     // the bytes already in buffer
     int nb_exists_bytes = (int)(end - p);
@@ -160,6 +161,7 @@ int SrsFastBuffer::grow(ISrsBufferReader* reader, int required_size)
             // reset when buffer is empty.
             p = end = buffer;
             srs_verbose("all consumed, reset fast buffer");
+            //把当前操作的内存移动到buffer
         } else if (nb_exists_bytes < nb_buffer && p > buffer) {
             // move the left bytes to start of buffer.
             // @remark Only move memory when space is enough, or failed at next check.
@@ -180,8 +182,10 @@ int SrsFastBuffer::grow(ISrsBufferReader* reader, int required_size)
     }
 
     // buffer is ok, read required size of bytes.
+    //
     while (end - p < required_size) {
         ssize_t nread;
+        //读到buffer中，从end开始存
         if ((ret = reader->read(end, nb_free_space, &nread)) != ERROR_SUCCESS) {
             return ret;
         }
@@ -200,6 +204,7 @@ int SrsFastBuffer::grow(ISrsBufferReader* reader, int required_size)
         
         // we just move the ptr to next.
         srs_assert((int)nread > 0);
+        //调整指针
         end += nread;
         nb_free_space -= nread;
     }
@@ -208,6 +213,7 @@ int SrsFastBuffer::grow(ISrsBufferReader* reader, int required_size)
 }
 
 #ifdef SRS_PERF_MERGED_READ
+//设置合并读。比如在SrsPublishRecvThread中，一次读取的小于4K，那么需要休眠等待
 void SrsFastBuffer::set_merge_read(bool v, IMergeReadHandler* handler)
 {
     merged_read = v;

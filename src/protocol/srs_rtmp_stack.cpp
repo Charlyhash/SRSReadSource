@@ -136,7 +136,7 @@ SrsPacket::SrsPacket()
 SrsPacket::~SrsPacket()
 {
 }
-
+//编码
 int SrsPacket::encode(int& psize, char*& ppayload)
 {
     int ret = ERROR_SUCCESS;
@@ -168,7 +168,7 @@ int SrsPacket::encode(int& psize, char*& ppayload)
     
     return ret;
 }
-
+//编码
 int SrsPacket::decode(SrsStream* stream)
 {
     int ret = ERROR_SUCCESS;
@@ -180,22 +180,23 @@ int SrsPacket::decode(SrsStream* stream)
     
     return ret;
 }
-
+//prefer cid
 int SrsPacket::get_prefer_cid()
 {
     return 0;
 }
-
+//message type
 int SrsPacket::get_message_type()
 {
     return 0;
 }
-
+//size
 int SrsPacket::get_size()
 {
     return 0;
 }
 
+//编码，需要重写
 int SrsPacket::encode_packet(SrsStream* stream)
 {
     int ret = ERROR_SUCCESS;
@@ -216,13 +217,14 @@ SrsProtocol::AckWindowSize::AckWindowSize()
 
 SrsProtocol::SrsProtocol(ISrsProtocolReaderWriter* io)
 {
-    in_buffer = new SrsFastBuffer();
-    skt = io;
-    
+    in_buffer = new SrsFastBuffer(); //buffer
+    skt = io; //用于读写的socket io
+    //设置接收和发送chunk的大小
     in_chunk_size = SRS_CONSTS_RTMP_PROTOCOL_CHUNK_SIZE;
     out_chunk_size = SRS_CONSTS_RTMP_PROTOCOL_CHUNK_SIZE;
-    
+    //chunk 通过 iovec 发送给对端，这里设置最大值
     nb_out_iovs = SRS_CONSTS_IOVS_MAX;
+    //设置iovec缓存
     out_iovs = (iovec*)malloc(sizeof(iovec) * nb_out_iovs);
     // each chunk consumers atleast 2 iovs
     srs_assert(nb_out_iovs >= 2);
@@ -289,6 +291,7 @@ void SrsProtocol::set_auto_response(bool v)
     auto_response_when_recv = v;
 }
 
+//手动发送响应消息
 int SrsProtocol::manual_response_flush()
 {
     int ret = ERROR_SUCCESS;
@@ -296,7 +299,7 @@ int SrsProtocol::manual_response_flush()
     if (manual_response_queue.empty()) {
         return ret;
     }
-    
+    //发送队列中的响应消息
     std::vector<SrsPacket*>::iterator it;
     for (it = manual_response_queue.begin(); it != manual_response_queue.end();) {
         SrsPacket* pkt = *it;
@@ -305,6 +308,7 @@ int SrsProtocol::manual_response_flush()
         it = manual_response_queue.erase(it);
         
         // use underlayer api to send, donot flush again.
+        // 发送响应的packet，stream id = 0
         if ((ret = do_send_and_free_packet(pkt, 0)) != ERROR_SUCCESS) {
             return ret;
         }
@@ -355,6 +359,7 @@ int64_t SrsProtocol::get_send_bytes()
     return skt->get_send_bytes();
 }
 
+//接收消息
 int SrsProtocol::recv_message(SrsCommonMessage** pmsg)
 {
     *pmsg = NULL;
@@ -363,7 +368,7 @@ int SrsProtocol::recv_message(SrsCommonMessage** pmsg)
     
     while (true) {
         SrsCommonMessage* msg = NULL;
-        
+        //接收消息
         if ((ret = recv_interlaced_message(&msg)) != ERROR_SUCCESS) {
             if (ret != ERROR_SOCKET_TIMEOUT && !srs_is_client_gracefully_close(ret)) {
                 srs_error("recv interlaced message failed. ret=%d", ret);
@@ -402,6 +407,7 @@ int SrsProtocol::recv_message(SrsCommonMessage** pmsg)
     return ret;
 }
 
+//解码
 int SrsProtocol::decode_message(SrsCommonMessage* msg, SrsPacket** ppacket)
 {
     *ppacket = NULL;
@@ -606,6 +612,7 @@ int SrsProtocol::do_iovs_send(iovec* iovs, int size)
     return srs_write_large_iovs(skt, iovs, size);
 }
 
+//发送packet
 int SrsProtocol::do_send_and_free_packet(SrsPacket* packet, int stream_id)
 {
     int ret = ERROR_SUCCESS;
@@ -615,6 +622,7 @@ int SrsProtocol::do_send_and_free_packet(SrsPacket* packet, int stream_id)
     
     int size = 0;
     char* payload = NULL;
+    // encode packet to payload and size.
     if ((ret = packet->encode(size, payload)) != ERROR_SUCCESS) {
         srs_error("encode RTMP packet to bytes oriented RTMP message failed. ret=%d", ret);
         return ret;
@@ -626,13 +634,13 @@ int SrsProtocol::do_send_and_free_packet(SrsPacket* packet, int stream_id)
         return ret;
     }
     
-    // to message
+    // packet转为message
     SrsMessageHeader header;
     header.payload_length = size;
     header.message_type = packet->get_message_type();
     header.stream_id = stream_id;
     header.perfer_cid = packet->get_prefer_cid();
-    
+    // 发送message
     ret = do_simple_send(&header, payload, size);
     srs_freepa(payload);
     if (ret == ERROR_SUCCESS) {
@@ -642,6 +650,7 @@ int SrsProtocol::do_send_and_free_packet(SrsPacket* packet, int stream_id)
     return ret;
 }
 
+//发送
 int SrsProtocol::do_simple_send(SrsMessageHeader* mh, char* payload, int size)
 {
     int ret = ERROR_SUCCESS;
@@ -655,11 +664,13 @@ int SrsProtocol::do_simple_send(SrsMessageHeader* mh, char* payload, int size)
     while (p < end) {
         int nbh = 0;
         if (p == payload) {
+            //c0头
             nbh = srs_chunk_header_c0(
                 mh->perfer_cid, mh->timestamp, mh->payload_length,
                 mh->message_type, mh->stream_id,
                 c0c3, sizeof(c0c3));
         } else {
+            //c3头
             nbh = srs_chunk_header_c3(
                 mh->perfer_cid, mh->timestamp,
                 c0c3, sizeof(c0c3));
@@ -674,7 +685,7 @@ int SrsProtocol::do_simple_send(SrsMessageHeader* mh, char* payload, int size)
         iovs[1].iov_base = p;
         iovs[1].iov_len = payload_size;
         p += payload_size;
-        
+        //写数据
         if ((ret = skt->writev(iovs, 2, NULL)) != ERROR_SUCCESS) {
             if (!srs_is_client_gracefully_close(ret)) {
                 srs_error("send packet with writev failed. ret=%d", ret);
@@ -686,6 +697,7 @@ int SrsProtocol::do_simple_send(SrsMessageHeader* mh, char* payload, int size)
     return ret;
 }
 
+//解码
 int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, SrsPacket** ppacket)
 {
     int ret = ERROR_SUCCESS;
@@ -693,6 +705,7 @@ int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, 
     SrsPacket* packet = NULL;
     
     // decode specified packet type
+    //确认解码的类型
     if (header.is_amf0_command() || header.is_amf3_command() || header.is_amf0_data() || header.is_amf3_data()) {
         srs_verbose("start to decode AMF0/AMF3 command message.");
         
@@ -705,6 +718,7 @@ int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, 
         // amf0 command message.
         // need to read the command name.
         std::string command;
+        //读取string类型，得到command
         if ((ret = srs_amf0_read_string(stream, command)) != ERROR_SUCCESS) {
             srs_error("decode AMF0/AMF3 command name failed. ret=%d", ret);
             return ret;
@@ -714,6 +728,7 @@ int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, 
         // result/error packet
         if (command == RTMP_AMF0_COMMAND_RESULT || command == RTMP_AMF0_COMMAND_ERROR) {
             double transactionId = 0.0;
+            //读取transaction id
             if ((ret = srs_amf0_read_number(stream, transactionId)) != ERROR_SUCCESS) {
                 srs_error("decode AMF0/AMF3 transcationId failed. ret=%d", ret);
                 return ret;
@@ -732,10 +747,10 @@ int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, 
                 srs_error("decode AMF0/AMF3 request failed. ret=%d", ret);
                 return ret;
             }
-            
+            //得到请求的名字
             std::string request_name = requests[transactionId];
             srs_verbose("AMF0/AMF3 request parsed. request_name=%s", request_name.c_str());
-
+            //根据请求的名字得到packet。交给每一种具体的packet去解码
             if (request_name == RTMP_AMF0_COMMAND_CONNECT) {
                 srs_info("decode the AMF0/AMF3 response command(%s message).", request_name.c_str());
                 *ppacket = packet = new SrsConnectAppResPacket();
@@ -765,7 +780,7 @@ int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, 
             stream->skip(1);
         }
         
-        // decode command object.
+        // decode command object
         if (command == RTMP_AMF0_COMMAND_CONNECT) {
             srs_info("decode the AMF0/AMF3 command(connect vhost/app message).");
             *ppacket = packet = new SrsConnectAppPacket();
@@ -919,6 +934,7 @@ int SrsProtocol::send_and_free_packet(SrsPacket* packet, int stream_id)
     return ret;
 }
 
+//接收消息
 int SrsProtocol::recv_interlaced_message(SrsCommonMessage** pmsg)
 {
     int ret = ERROR_SUCCESS;
@@ -1701,7 +1717,7 @@ SrsChunkStream::~SrsChunkStream()
 {
     srs_freep(msg);
 }
-
+//构造函数
 SrsRequest::SrsRequest()
 {
     objectEncoding = RTMP_SIG_AMF0_VER;
@@ -1713,7 +1729,7 @@ SrsRequest::~SrsRequest()
 {
     srs_freep(args);
 }
-
+//复制
 SrsRequest* SrsRequest::copy()
 {
     SrsRequest* cp = new SrsRequest();
@@ -1738,6 +1754,7 @@ SrsRequest* SrsRequest::copy()
     return cp;
 }
 
+//更新认证信息，req的信息复制给当前的req
 void SrsRequest::update_auth(SrsRequest* req)
 {
     pageUrl = req->pageUrl;
@@ -1755,11 +1772,13 @@ void SrsRequest::update_auth(SrsRequest* req)
     srs_info("update req of soruce for auth ok");
 }
 
+//获取stream url
 string SrsRequest::get_stream_url()
 {
     return srs_generate_stream_url(vhost, app, stream);
 }
 
+//strip一些没用的空格，换行等，移除app和stream的起始和结尾的/
 void SrsRequest::strip()
 {
     // remove the unsupported chars in names.
@@ -1776,7 +1795,7 @@ void SrsRequest::strip()
     app = srs_string_trim_start(app, "/");
     stream = srs_string_trim_start(stream, "/");
 }
-
+//转换为http, scheme设置为http
 SrsRequest* SrsRequest::as_http()
 {
     schema = "http";
@@ -1820,6 +1839,7 @@ SrsHandshakeBytes::~SrsHandshakeBytes()
     srs_freepa(c2);
 }
 
+//读c0c1
 int SrsHandshakeBytes::read_c0c1(ISrsProtocolReaderWriter* io)
 {
     int ret = ERROR_SUCCESS;
@@ -1831,6 +1851,7 @@ int SrsHandshakeBytes::read_c0c1(ISrsProtocolReaderWriter* io)
     ssize_t nsize;
     
     c0c1 = new char[1537];
+    //从io1537个字节存放到c0c1中
     if ((ret = io->read_fully(c0c1, 1537, &nsize)) != ERROR_SUCCESS) {
         srs_warn("read c0c1 failed. ret=%d", ret);
         return ret;
@@ -1880,6 +1901,7 @@ int SrsHandshakeBytes::read_c2(ISrsProtocolReaderWriter* io)
     return ret;
 }
 
+//创建c0c1,1537个字节
 int SrsHandshakeBytes::create_c0c1()
 {
     int ret = ERROR_SUCCESS;
@@ -1888,7 +1910,7 @@ int SrsHandshakeBytes::create_c0c1()
         return ret;
     }
     
-    c0c1 = new char[1537];
+    c0c1 = new char[1537]; //1537个字节
     srs_random_generate(c0c1, 1537);
     
     // plain text required.
@@ -1896,6 +1918,7 @@ int SrsHandshakeBytes::create_c0c1()
     if ((ret = stream.initialize(c0c1, 9)) != ERROR_SUCCESS) {
         return ret;
     }
+    //0x03 | timestamp | 0x00
     stream.write_1bytes(0x03);
     stream.write_4bytes((int32_t)::time(NULL));
     stream.write_4bytes(0x00);
@@ -1903,6 +1926,7 @@ int SrsHandshakeBytes::create_c0c1()
     return ret;
 }
 
+//创建s0s1s2
 int SrsHandshakeBytes::create_s0s1s2(const char* c1)
 {
     int ret = ERROR_SUCCESS;
@@ -1919,6 +1943,7 @@ int SrsHandshakeBytes::create_s0s1s2(const char* c1)
     if ((ret = stream.initialize(s0s1s2, 9)) != ERROR_SUCCESS) {
         return ret;
     }
+    //0x03 | timestamp | c1 timestamp
     stream.write_1bytes(0x03);
     stream.write_4bytes((int32_t)::time(NULL));
     // s1 time2 copy from c1
@@ -1928,13 +1953,14 @@ int SrsHandshakeBytes::create_s0s1s2(const char* c1)
     
     // if c1 specified, copy c1 to s2.
     // @see: https://github.com/ossrs/srs/issues/46
-    if (c1) {
+    if (c1) { //复制c1到s2
         memcpy(s0s1s2 + 1537, c1, 1536);
     }
     
     return ret;
 }
 
+//创建c2
 int SrsHandshakeBytes::create_c2()
 {
     int ret = ERROR_SUCCESS;
@@ -1951,8 +1977,10 @@ int SrsHandshakeBytes::create_c2()
     if ((ret = stream.initialize(c2, 8)) != ERROR_SUCCESS) {
         return ret;
     }
+    //timestamp
     stream.write_4bytes((int32_t)::time(NULL));
     // c2 time2 copy from s1
+    //复制s1到c2
     if (s0s1s2) {
         stream.write_bytes(s0s1s2 + 1, 4);
     }
@@ -1960,10 +1988,11 @@ int SrsHandshakeBytes::create_c2()
     return ret;
 }
 
+//构造函数
 SrsRtmpClient::SrsRtmpClient(ISrsProtocolReaderWriter* skt)
 {
-    io = skt;
-    protocol = new SrsProtocol(skt);
+    io = skt; //读写的io
+    protocol = new SrsProtocol(skt); //用于读写
     hs_bytes = new SrsHandshakeBytes();
 }
 
@@ -2080,6 +2109,7 @@ int SrsRtmpClient::complex_handshake()
     return ret;
 }
 
+//连接到APP
 int SrsRtmpClient::connect_app(string app, string tc_url, SrsRequest* req, bool debug_srs_upnode)
 {
     std::string srs_server_ip;
@@ -2095,6 +2125,7 @@ int SrsRtmpClient::connect_app(string app, string tc_url, SrsRequest* req, bool 
         srs_version, srs_id, srs_pid);
 }
 
+//连接大服务器
 int SrsRtmpClient::connect_app2(
     string app, string tc_url, SrsRequest* req, bool debug_srs_upnode,
     string& srs_server_ip, string& srs_server, string& srs_primary,
@@ -2105,6 +2136,7 @@ int SrsRtmpClient::connect_app2(
     
     // Connect(vhost, app)
     if (true) {
+        //创建connect app packet
         SrsConnectAppPacket* pkt = new SrsConnectAppPacket();
         
         pkt->command_object->set("app", SrsAmf0Any::str(app.c_str()));
@@ -2137,7 +2169,7 @@ int SrsRtmpClient::connect_app2(
             srs_freep(pkt->args);
             pkt->args = req->args->copy()->to_object();
         }
-        
+        //发送packet
         if ((ret = protocol->send_and_free_packet(pkt, 0)) != ERROR_SUCCESS) {
             return ret;
         }
@@ -2155,6 +2187,7 @@ int SrsRtmpClient::connect_app2(
     // expect connect _result
     SrsCommonMessage* msg = NULL;
     SrsConnectAppResPacket* pkt = NULL;
+    //期待返回一个_result
     if ((ret = expect_message<SrsConnectAppResPacket>(&msg, &pkt)) != ERROR_SUCCESS) {
         srs_error("expect connect app response message failed. ret=%d", ret);
         return ret;
@@ -2371,9 +2404,11 @@ int SrsRtmpClient::fmle_publish(string stream, int& stream_id)
     return ret;
 }
 
+//构造函数，接受一个底层读写的socket
 SrsRtmpServer::SrsRtmpServer(ISrsProtocolReaderWriter* skt)
 {
-    io = skt;
+    io = skt; //进行io操作的成员
+    //接受一个底层读写的socket，用于协议收发数据
     protocol = new SrsProtocol(skt);
     hs_bytes = new SrsHandshakeBytes();
 }
@@ -2456,6 +2491,7 @@ int SrsRtmpServer::send_and_free_packet(SrsPacket* packet, int stream_id)
     return protocol->send_and_free_packet(packet, stream_id);
 }
 
+//握手
 int SrsRtmpServer::handshake()
 {
     int ret = ERROR_SUCCESS;
@@ -2478,12 +2514,14 @@ int SrsRtmpServer::handshake()
     return ret;
 }
 
+//连接app
 int SrsRtmpServer::connect_app(SrsRequest* req)
 {
     int ret = ERROR_SUCCESS;
     
     SrsCommonMessage* msg = NULL;
     SrsConnectAppPacket* pkt = NULL;
+    //期待客户端发送connect的packet
     if ((ret = expect_message<SrsConnectAppPacket>(&msg, &pkt)) != ERROR_SUCCESS) {
         srs_error("expect connect app message failed. ret=%d", ret);
         return ret;
@@ -2493,7 +2531,7 @@ int SrsRtmpServer::connect_app(SrsRequest* req)
     srs_info("get connect app message");
     
     SrsAmf0Any* prop = NULL;
-    
+    //下面把packet的信息解析出来
     if ((prop = pkt->command_object->ensure_property_string("tcUrl")) == NULL) {
         ret = ERROR_RTMP_REQ_CONNECT;
         srs_error("invalid request, must specifies the tcUrl. ret=%d", ret);
@@ -2529,6 +2567,7 @@ int SrsRtmpServer::connect_app(SrsRequest* req)
     return ret;
 }
 
+//设置窗口响应的大小
 int SrsRtmpServer::set_window_ack_size(int ack_size)
 {
     int ret = ERROR_SUCCESS;
@@ -2544,6 +2583,7 @@ int SrsRtmpServer::set_window_ack_size(int ack_size)
     return ret;
 }
 
+//设置对端带宽
 int SrsRtmpServer::set_peer_bandwidth(int bandwidth, int type)
 {
     int ret = ERROR_SUCCESS;
@@ -2561,13 +2601,14 @@ int SrsRtmpServer::set_peer_bandwidth(int bandwidth, int type)
     return ret;
 }
 
+//响应connet app
 int SrsRtmpServer::response_connect_app(SrsRequest *req, const char* server_ip)
 {
     int ret = ERROR_SUCCESS;
     
     SrsConnectAppResPacket* pkt = new SrsConnectAppResPacket();
     
-    pkt->props->set("fmsVer", SrsAmf0Any::str("FMS/"RTMP_SIG_FMS_VER));
+    pkt->props->set("fmsVer", SrsAmf0Any::str("FMS/" RTMP_SIG_FMS_VER));
     pkt->props->set("capabilities", SrsAmf0Any::number(127));
     pkt->props->set("mode", SrsAmf0Any::number(1));
     
@@ -2607,6 +2648,7 @@ int SrsRtmpServer::response_connect_app(SrsRequest *req, const char* server_ip)
     return ret;
 }
 
+//拒绝连接
 void SrsRtmpServer::response_connect_reject(SrsRequest* /*req*/, const char* desc)
 {
     int ret = ERROR_SUCCESS;
@@ -2625,6 +2667,7 @@ void SrsRtmpServer::response_connect_reject(SrsRequest* /*req*/, const char* des
     return;
 }
 
+//响应带宽检测
 int SrsRtmpServer::on_bw_done()
 {
     int ret = ERROR_SUCCESS;
@@ -2639,6 +2682,7 @@ int SrsRtmpServer::on_bw_done()
     return ret;
 }
 
+//根据客户端发送过来的packet，判断所属的类型
 int SrsRtmpServer::identify_client(int stream_id, SrsRtmpConnType& type, string& stream_name, double& duration)
 {
     type = SrsRtmpConnUnknown;
@@ -2718,6 +2762,7 @@ int SrsRtmpServer::identify_client(int stream_id, SrsRtmpConnType& type, string&
     return ret;
 }
 
+//设置chunk size
 int SrsRtmpServer::set_chunk_size(int chunk_size)
 {
     int ret = ERROR_SUCCESS;
@@ -2733,12 +2778,14 @@ int SrsRtmpServer::set_chunk_size(int chunk_size)
     return ret;
 }
 
+//start play
 int SrsRtmpServer::start_play(int stream_id)
 {
     int ret = ERROR_SUCCESS;
     
     // StreamBegin
     if (true) {
+        //创建一个用户控制packet，设置类型为StreamBegin
         SrsUserControlPacket* pkt = new SrsUserControlPacket();
         pkt->event_type = SrcPCUCStreamBegin;
         pkt->event_data = stream_id;
@@ -2751,6 +2798,7 @@ int SrsRtmpServer::start_play(int stream_id)
     
     // onStatus(NetStream.Play.Reset)
     if (true) {
+        //创建一个OnStatus packet，设置为NetStream.Play.Reset
         SrsOnStatusCallPacket* pkt = new SrsOnStatusCallPacket();
         
         pkt->data->set(StatusLevel, SrsAmf0Any::str(StatusLevelStatus));
@@ -2769,7 +2817,7 @@ int SrsRtmpServer::start_play(int stream_id)
     // onStatus(NetStream.Play.Start)
     if (true) {
         SrsOnStatusCallPacket* pkt = new SrsOnStatusCallPacket();
-        
+        //NetStream.Play.Start
         pkt->data->set(StatusLevel, SrsAmf0Any::str(StatusLevelStatus));
         pkt->data->set(StatusCode, SrsAmf0Any::str(StatusCodeStreamStart));
         pkt->data->set(StatusDescription, SrsAmf0Any::str("Started playing stream."));
@@ -2785,6 +2833,7 @@ int SrsRtmpServer::start_play(int stream_id)
     
     // |RtmpSampleAccess(false, false)
     if (true) {
+        //
         SrsSampleAccessPacket* pkt = new SrsSampleAccessPacket();
 
         // allow audio/video sample.
@@ -2801,6 +2850,7 @@ int SrsRtmpServer::start_play(int stream_id)
     
     // onStatus(NetStream.Data.Start)
     if (true) {
+        //NetStream.Data.Start
         SrsOnStatusDataPacket* pkt = new SrsOnStatusDataPacket();
         pkt->data->set(StatusCode, SrsAmf0Any::str(StatusCodeDataStart));
         if ((ret = protocol->send_and_free_packet(pkt, stream_id)) != ERROR_SUCCESS) {
@@ -2815,6 +2865,7 @@ int SrsRtmpServer::start_play(int stream_id)
     return ret;
 }
 
+//client pause消息
 int SrsRtmpServer::on_play_client_pause(int stream_id, bool is_pause)
 {
     int ret = ERROR_SUCCESS;
@@ -2880,6 +2931,7 @@ int SrsRtmpServer::on_play_client_pause(int stream_id, bool is_pause)
     return ret;
 }
 
+//start publish
 int SrsRtmpServer::start_fmle_publish(int stream_id)
 {
     int ret = ERROR_SUCCESS;
@@ -2984,6 +3036,7 @@ int SrsRtmpServer::start_fmle_publish(int stream_id)
     return ret;
 }
 
+//haivision的publish，与其他不同
 int SrsRtmpServer::start_haivision_publish(int stream_id)
 {
     int ret = ERROR_SUCCESS;
@@ -3038,6 +3091,7 @@ int SrsRtmpServer::start_haivision_publish(int stream_id)
     return ret;
 }
 
+//unpublish
 int SrsRtmpServer::fmle_unpublish(int stream_id, double unpublish_tid)
 {
     int ret = ERROR_SUCCESS;
@@ -3045,7 +3099,7 @@ int SrsRtmpServer::fmle_unpublish(int stream_id, double unpublish_tid)
     // publish response onFCUnpublish(NetStream.unpublish.Success)
     if (true) {
         SrsOnStatusCallPacket* pkt = new SrsOnStatusCallPacket();
-        
+        //停止publish stream
         pkt->command_name = RTMP_AMF0_COMMAND_ON_FC_UNPUBLISH;
         pkt->data->set(StatusCode, SrsAmf0Any::str(StatusCodeUnpublishSuccess));
         pkt->data->set(StatusDescription, SrsAmf0Any::str("Stop publishing stream."));
@@ -3060,6 +3114,7 @@ int SrsRtmpServer::fmle_unpublish(int stream_id, double unpublish_tid)
     }
     // FCUnpublish response
     if (true) {
+        //FCUnpublish响应
         SrsFMLEStartResPacket* pkt = new SrsFMLEStartResPacket(unpublish_tid);
         if ((ret = protocol->send_and_free_packet(pkt, stream_id)) != ERROR_SUCCESS) {
             if (!srs_is_system_control_error(ret) && !srs_is_client_gracefully_close(ret)) {
@@ -3071,6 +3126,7 @@ int SrsRtmpServer::fmle_unpublish(int stream_id, double unpublish_tid)
     }
     // publish response onStatus(NetStream.Unpublish.Success)
     if (true) {
+        //onStatus的响应
         SrsOnStatusCallPacket* pkt = new SrsOnStatusCallPacket();
         
         pkt->data->set(StatusLevel, SrsAmf0Any::str(StatusLevelStatus));
@@ -3092,6 +3148,7 @@ int SrsRtmpServer::fmle_unpublish(int stream_id, double unpublish_tid)
     return ret;
 }
 
+//flash publish
 int SrsRtmpServer::start_flash_publish(int stream_id)
 {
     int ret = ERROR_SUCCESS;
@@ -3117,6 +3174,7 @@ int SrsRtmpServer::start_flash_publish(int stream_id)
     return ret;
 }
 
+//确认推流客户端
 int SrsRtmpServer::identify_create_stream_client(SrsCreateStreamPacket* req, int stream_id, SrsRtmpConnType& type, string& stream_name, double& duration)
 {
     int ret = ERROR_SUCCESS;
@@ -3233,6 +3291,7 @@ int SrsRtmpServer::identify_flash_publish_client(SrsPublishPacket* req, SrsRtmpC
     return ret;
 }
 
+//播放客户端的响应，info信息
 int SrsRtmpServer::identify_play_client(SrsPlayPacket* req, SrsRtmpConnType& type, string& stream_name, double& duration)
 {
     int ret = ERROR_SUCCESS;
@@ -3246,6 +3305,7 @@ int SrsRtmpServer::identify_play_client(SrsPlayPacket* req, SrsRtmpConnType& typ
     return ret;
 }
 
+//
 SrsConnectAppPacket::SrsConnectAppPacket()
 {
     command_name = RTMP_AMF0_COMMAND_CONNECT;

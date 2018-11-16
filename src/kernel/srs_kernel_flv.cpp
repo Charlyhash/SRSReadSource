@@ -40,6 +40,7 @@ using namespace std;
 #include <srs_kernel_utility.hpp>
 #include <srs_core_mem_watch.hpp>
 
+//构造函数
 SrsMessageHeader::SrsMessageHeader()
 {
     message_type = 0;
@@ -166,6 +167,7 @@ SrsCommonMessage::~SrsCommonMessage()
     srs_freepa(payload);
 }
 
+//创建payload
 void SrsCommonMessage::create_payload(int size)
 {
     srs_freepa(payload);
@@ -299,6 +301,7 @@ bool SrsSharedPtrMessage::is_video()
     return ptr->header.message_type == RTMP_MSG_VideoMessage;
 }
 
+//缓存头部信息
 int SrsSharedPtrMessage::chunk_header(char* cache, int nb_cache, bool c0)
 {
     if (c0) {
@@ -313,6 +316,7 @@ int SrsSharedPtrMessage::chunk_header(char* cache, int nb_cache, bool c0)
     }
 }
 
+//复制SPMessage
 SrsSharedPtrMessage* SrsSharedPtrMessage::copy()
 {
     srs_assert(ptr);
@@ -320,7 +324,7 @@ SrsSharedPtrMessage* SrsSharedPtrMessage::copy()
     SrsSharedPtrMessage* copy = new SrsSharedPtrMessage();
     
     copy->ptr = ptr;
-    ptr->shared_count++;
+    ptr->shared_count++; //这里引用计数增加
     
     copy->timestamp = timestamp;
     copy->stream_id = stream_id;

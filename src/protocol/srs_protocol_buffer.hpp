@@ -67,6 +67,7 @@ public:
 *       char* payload = fb->read_payload(924);
 */
 // TODO: FIXME: add utest for it.
+//应用层的buffer，从socket读取的数据存放在FastBuffer中
 class SrsFastBuffer
 {
 private:
@@ -79,14 +80,14 @@ private:
     // which use fast index and reset when chunk body read ok.
     // @see https://github.com/ossrs/srs/issues/248
     // ptr to the current read position.
-    char* p;
+    char* p; //当前读的位置
     // ptr to the content end.
-    char* end;
+    char* end; //buffer读的末尾
     // ptr to the buffer.
     //      buffer <= p <= end <= buffer+nb_buffer
-    char* buffer;
+    char* buffer; //buffer
     // the size of buffer.
-    int nb_buffer;
+    int nb_buffer; //buffer总大小
 public:
     SrsFastBuffer();
     virtual ~SrsFastBuffer();
@@ -94,13 +95,13 @@ public:
     /**
     * get the size of current bytes in buffer.
     */
-    virtual int size();
+    virtual int size(); //获取当前buffer的大小
     /**
     * get the current bytes in buffer.
     * @remark user should use read_slice() if possible, 
     *       the bytes() is used to test bytes, for example, to detect the bytes schema.
     */
-    virtual char* bytes();
+    virtual char* bytes(); //当前buffer
     /**
     * create buffer with specifeid size.
     * @param buffer the size of buffer. ignore when smaller than SRS_MAX_SOCKET_BUFFER.
@@ -108,20 +109,20 @@ public:
     * @remark when buffer changed, the previous ptr maybe invalid.
     * @see https://github.com/ossrs/srs/issues/241
     */
-    virtual void set_buffer(int buffer_size);
+    virtual void set_buffer(int buffer_size); //创建buffer，大小为buffer_size
 public:
     /**
     * read 1byte from buffer, move to next bytes.
     * @remark assert buffer already grow(1).
     */
-    virtual char read_1byte();
+    virtual char read_1byte(); //读1byte
     /**
     * read a slice in size bytes, move to next bytes.
     * user can use this char* ptr directly, and should never free it.
     * @remark user can use the returned ptr util grow(size),
     *       for the ptr returned maybe invalid after grow(x).
     */
-    virtual char* read_slice(int size);
+    virtual char* read_slice(int size);//读取size个大小
     /**
     * skip some bytes in buffer.
     * @param size the bytes to skip. positive to next; negative to previous.
@@ -129,7 +130,7 @@ public:
     * @remark always use read_slice to consume bytes, which will reset for EOF.
     *       while skip never consume bytes.
     */
-    virtual void skip(int size);
+    virtual void skip(int size); //skip size字节
 public:
     /**
     * grow buffer to the required size, loop to read from skt to fill.
@@ -138,7 +139,7 @@ public:
     * @return an int error code, error if required_size negative.
     * @remark, we actually maybe read more than required_size, maybe 4k for example.
     */
-    virtual int grow(ISrsBufferReader* reader, int required_size);
+    virtual int grow(ISrsBufferReader* reader, int required_size); //增长
 public:
 #ifdef SRS_PERF_MERGED_READ
     /**
@@ -150,6 +151,7 @@ public:
     * @see https://github.com/ossrs/srs/issues/241
     * @remark the merged read is optional, ignore if not specifies.
     */
+    //设置合并读
     virtual void set_merge_read(bool v, IMergeReadHandler* handler);
 #endif
 };

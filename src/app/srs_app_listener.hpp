@@ -67,6 +67,7 @@ public:
 /**
 * the tcp connection handler.
 */
+//tcp connection handler
 class ISrsTcpHandler
 {
 public:
@@ -76,6 +77,7 @@ public:
     /**
     * when got tcp client.
     */
+    //当接收tcp连接后的回调
     virtual int on_tcp_client(st_netfd_t stfd) = 0;
 };
 
@@ -111,26 +113,27 @@ public:
 /**
 * bind and listen tcp port, use handler to process the client.
 */
+//SrsTcpListener用于bind和listen
 class SrsTcpListener : public ISrsReusableThreadHandler
 {
 private:
-    int _fd;
-    st_netfd_t _stfd;
-    SrsReusableThread* pthread;
+    int _fd; //fd
+    st_netfd_t _stfd; //stfd
+    SrsReusableThread* pthread; //所属协程
 private:
-    ISrsTcpHandler* handler;
-    std::string ip;
-    int port;
+    ISrsTcpHandler* handler; //TCP的处理回调
+    std::string ip; //ip
+    int port; //pot
 public:
     SrsTcpListener(ISrsTcpHandler* h, std::string i, int p);
     virtual ~SrsTcpListener();
 public:
     virtual int fd();
 public:
-    virtual int listen();
+    virtual int listen(); //监听
 // interface ISrsReusableThreadHandler.
 public:
-    virtual int cycle();
+    virtual int cycle(); //协程循环
 };
 
 #endif

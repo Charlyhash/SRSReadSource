@@ -181,16 +181,16 @@ int SrsUdpListener::cycle()
 
 SrsTcpListener::SrsTcpListener(ISrsTcpHandler* h, string i, int p)
 {
-    handler = h;
+    handler = h; //tcp连接的回调
     ip = i;
     port = p;
 
     _fd = -1;
     _stfd = NULL;
-
+    //创建监听的协程
     pthread = new SrsReusableThread("tcp", this);
 }
-
+//析构函数
 SrsTcpListener::~SrsTcpListener()
 {
     pthread->stop();
@@ -207,7 +207,7 @@ int SrsTcpListener::fd()
 int SrsTcpListener::listen()
 {
     int ret = ERROR_SUCCESS;
-    
+    //socket, 服务端fd
     if ((_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         ret = ERROR_SOCKET_CREATE;
         srs_error("create linux socket error. port=%d, ret=%d", port, ret);
@@ -216,6 +216,7 @@ int SrsTcpListener::listen()
     srs_verbose("create linux socket success. port=%d, fd=%d", port, _fd);
     
     int reuse_socket = 1;
+    //设置reuse
     if (setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &reuse_socket, sizeof(int)) == -1) {
         ret = ERROR_SOCKET_SETREUSE;
         srs_error("setsockopt reuse-addr error. port=%d, ret=%d", port, ret);
@@ -226,6 +227,7 @@ int SrsTcpListener::listen()
     // Detect alive for TCP connection.
     // @see https://github.com/ossrs/srs/issues/1044
 #ifdef SO_KEEPALIVE
+    //设置keep alive
     int tcp_keepalive = 1;
     if (setsockopt(_fd, SOL_SOCKET, SO_KEEPALIVE, &tcp_keepalive, sizeof(int)) == -1) {
         ret = ERROR_SOCKET_SETKEEPALIVE;
@@ -234,7 +236,7 @@ int SrsTcpListener::listen()
     }
     srs_verbose("setsockopt SO_KEEPALIVE[%d]success. port=%d", tcp_keepalive, port);
 #endif
-
+    //bind
     sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
@@ -245,21 +247,21 @@ int SrsTcpListener::listen()
         return ret;
     }
     srs_verbose("bind socket success. ep=%s:%d, fd=%d", ip.c_str(), port, _fd);
-    
+    //监听
     if (::listen(_fd, SERVER_LISTEN_BACKLOG) == -1) {
         ret = ERROR_SOCKET_LISTEN;
         srs_error("listen socket error. ep=%s:%d, ret=%d", ip.c_str(), port, ret);
         return ret;
     }
     srs_verbose("listen socket success. ep=%s:%d, fd=%d", ip.c_str(), port, _fd);
-    
+    //把fd注册到协程库，得到stfd
     if ((_stfd = st_netfd_open_socket(_fd)) == NULL){
         ret = ERROR_ST_OPEN_SOCKET;
         srs_error("st_netfd_open_socket open socket failed. ep=%s:%d, ret=%d", ip.c_str(), port, ret);
         return ret;
     }
     srs_verbose("st open socket success. ep=%s:%d, fd=%d", ip.c_str(), port, _fd);
-    
+    //启动协程监听，协程执行函数cycle
     if ((ret = pthread->start()) != ERROR_SUCCESS) {
         srs_error("st_thread_create listen thread error. ep=%s:%d, ret=%d", ip.c_str(), port, ret);
         return ret;
@@ -269,6 +271,7 @@ int SrsTcpListener::listen()
     return ret;
 }
 
+//cycle接收连接，并触发on_tcp_client回调，继续循环
 int SrsTcpListener::cycle()
 {
     int ret = ERROR_SUCCESS;
@@ -283,7 +286,7 @@ int SrsTcpListener::cycle()
         return ret;
     }
     srs_verbose("get a client. fd=%d", st_netfd_fileno(client_stfd));
-    
+    //回调SrsStreamListener的on_tcp_client
     if ((ret = handler->on_tcp_client(client_stfd)) != ERROR_SUCCESS) {
         srs_warn("accept client error. ret=%d", ret);
         return ret;

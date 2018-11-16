@@ -190,25 +190,25 @@ public:
      * Three-byte field that contains a timestamp delta of the message.
      * @remark, only used for decoding message from chunk stream.
      */
-    int32_t timestamp_delta;
+    int32_t timestamp_delta; //timestamp的差值
     /**
      * 3bytes.
      * Three-byte field that represents the size of the payload in bytes.
      * It is set in big-endian format.
      */
-    int32_t payload_length;
+    int32_t payload_length; //数据长度，不包含头部
     /**
      * 1byte.
      * One byte field to represent the message type. A range of type IDs
      * (1-7) are reserved for protocol control messages.
      */
-    int8_t message_type;
+    int8_t message_type; //消息类型
     /**
      * 4bytes.
      * Four-byte field that identifies the stream of the message. These
      * bytes are set in little-endian format.
      */
-    int32_t stream_id;
+    int32_t stream_id; //流ID
     
     /**
      * Four-byte field that contains a timestamp of the message.
@@ -216,11 +216,11 @@ public:
      * @remark, used as calc timestamp when decode and encode time.
      * @remark, we use 64bits for large time for jitter detect and hls.
      */
-    int64_t timestamp;
+    int64_t timestamp; //timestamp
 public:
     /**
-     * get the perfered cid(chunk stream id) which sendout over.
-     * set at decoding, and canbe used for directly send message,
+     * get the preferred cid(chunk stream id) which send out over.
+     * set at decoding, and can be used for directly send message,
      * for example, dispatch to all connections.
      */
     int perfer_cid;
@@ -257,10 +257,11 @@ public:
 
 /**
  * message is raw data RTMP message, bytes oriented,
- * protcol always recv RTMP message, and can send RTMP message or RTMP packet.
+ * protocol always recv RTMP message, and can send RTMP message or RTMP packet.
  * the common message is read from underlay protocol sdk.
  * while the shared ptr message used to copy and send.
  */
+ //公共消息类，头部+payload
 class SrsCommonMessage
 {
     // 4.1. Message Header
@@ -273,7 +274,7 @@ public:
      *       size <= header.payload_length
      * for the payload maybe sent in multiple chunks.
      */
-    int size;
+    int size; //消息的大小,可能是多个消息一起发送，因此不超过header.payload_length
     /**
      * the payload of message, the SrsCommonMessage never know about the detail of payload,
      * user must use SrsProtocol.decode_message to get concrete packet.
@@ -295,6 +296,7 @@ public:
  * the message header for shared ptr message.
  * only the message for all msgs are same.
  */
+ //sp message的头部
 struct SrsSharedMessageHeader
 {
     /**
@@ -310,8 +312,8 @@ struct SrsSharedMessageHeader
      */
     int8_t message_type;
     /**
-     * get the perfered cid(chunk stream id) which sendout over.
-     * set at decoding, and canbe used for directly send message,
+     * get the preferred cid(chunk stream id) which send out over.
+     * set at decoding, and can be used for directly send message,
      * for example, dispatch to all connections.
      */
     int perfer_cid;
@@ -326,6 +328,7 @@ struct SrsSharedMessageHeader
  * use copy if need reference count message.
  *
  */
+ //用于存放音频或视频消息，共享内存，减少内存拷贝
 class SrsSharedPtrMessage
 {
     // 4.1. Message Header
@@ -339,13 +342,13 @@ public:
      * @remark, used as calc timestamp when decode and encode time.
      * @remark, we use 64bits for large time for jitter detect and hls.
      */
-    int64_t timestamp;
+    int64_t timestamp; //时间戳
     /**
      * 4bytes.
      * Four-byte field that identifies the stream of the message. These
      * bytes are set in big-endian format.
      */
-    int32_t stream_id;
+    int32_t stream_id; //stream id
     // 4.2. Message Payload
 public:
     /**
@@ -353,15 +356,16 @@ public:
      *       size <= header.payload_length
      * for the payload maybe sent in multiple chunks.
      */
-    int size;
+    int size; //当前消息解析出来的大小
     /**
      * the payload of message, the SrsCommonMessage never know about the detail of payload,
      * user must use SrsProtocol.decode_message to get concrete packet.
      * @remark, not all message payload can be decoded to packet. for example,
      *       video/audio packet use raw bytes, no video/audio packet.
      */
-    char* payload;
+    char* payload;//payload
 private:
+    //用于共享的payload
     class SrsSharedPtrPayload
     {
     public:
@@ -389,13 +393,14 @@ public:
      * set the payload to NULL to prevent double free.
      * @remark payload of msg set to NULL if success.
      */
-    virtual int create(SrsCommonMessage* msg);
+    virtual int create(SrsCommonMessage* msg); //创建
     /**
      * create shared ptr message,
      * from the header and payload.
      * @remark user should never free the payload.
      * @param pheader, the header to copy to the message. NULL to ignore.
      */
+     //创建
     virtual int create(SrsMessageHeader* pheader, char* payload, int size);
     /**
      * get current reference count.
@@ -404,11 +409,13 @@ public:
      * if this or copy deleted, free payload when count is 0, or count--.
      * @remark, assert object is created.
      */
+     //计数
     virtual int count();
     /**
-     * check perfer cid and stream id.
+     * check prefer cid and stream id.
      * @return whether stream id already set.
      */
+     //检查prefer cid与stream id是否相等
     virtual bool check(int stream_id);
 public:
     virtual bool is_av();
@@ -419,18 +426,22 @@ public:
      * generate the chunk header to cache.
      * @return the size of header.
      */
+     //生成头部信息
     virtual int chunk_header(char* cache, int nb_cache, bool c0);
 public:
     /**
      * copy current shared ptr message, use ref-count.
      * @remark, assert object is created.
      */
+     //复制sp message, 引用计数增加
     virtual SrsSharedPtrMessage* copy();
 };
 
 /**
 * encode data to flv file.
 */
+
+//编码为flv文件
 class SrsFlvEncoder
 {
 private:

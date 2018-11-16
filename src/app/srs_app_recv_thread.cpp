@@ -430,6 +430,7 @@ void SrsPublishRecvThread::on_read(ssize_t nread)
     * that is, we merge some data to read together.
     * @see https://github.com/ossrs/srs/issues/241
     */
+    //当读取的字节小于4k, 直接休眠，提升度的性能
     if (nread < SRS_MR_SMALL_BYTES) {
         st_usleep(mr_sleep * 1000);
     }

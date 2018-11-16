@@ -39,19 +39,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * the socket provides TCP socket over st,
  * that is, the sync socket mechanism.
  */
- //用于接受和发送数据
+ //基于协程的Socket，用于接受和发送数据
 class SrsStSocket : public ISrsProtocolReaderWriter
 {
 private:
-    int64_t recv_timeout;
-    int64_t send_timeout;
-    int64_t recv_bytes;
-    int64_t send_bytes;
-    st_netfd_t stfd;
+    int64_t recv_timeout; //接收超时时间
+    int64_t send_timeout; //发送超时时间
+    int64_t recv_bytes; //接收字节数
+    int64_t send_bytes; //发送字节数
+    st_netfd_t stfd; //读写的socket
 public:
     SrsStSocket(st_netfd_t client_stfd);
     virtual ~SrsStSocket();
 public:
+    //超时和收发字节相关系列函数
     virtual bool is_never_timeout(int64_t timeout_us);
     virtual void set_recv_timeout(int64_t timeout_us);
     virtual int64_t get_recv_timeout();
@@ -63,12 +64,16 @@ public:
     /**
      * @param nread, the actual read bytes, ignore if NULL.
      */
+    //从stfd读取size个字节到buf，nread为读取的字节数
     virtual int read(void* buf, size_t size, ssize_t* nread);
+    //从stfd读取完size个字节到buf，nread为读取的字节数
     virtual int read_fully(void* buf, size_t size, ssize_t* nread);
     /**
      * @param nwrite, the actual write bytes, ignore if NULL.
      */
+    //将buf中的size个字节写入到stfd, nwrite为写入的字节数
     virtual int write(void* buf, size_t size, ssize_t* nwrite);
+    //将iov_size个iov写入到stfd, nwrite为写入的个数
     virtual int writev(const iovec *iov, int iov_size, ssize_t* nwrite);
 };
 

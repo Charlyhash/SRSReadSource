@@ -35,6 +35,7 @@ IConnectionManager::~IConnectionManager()
 {
 }
 
+//构造函数
 SrsConnection::SrsConnection(IConnectionManager* cm, st_netfd_t c)
 {
     id = 0;
@@ -69,25 +70,28 @@ void SrsConnection::dispose()
      * when delete the connection, stop the connection,
      * close the underlayer socket, delete the thread.
      */
-    srs_close_stfd(stfd);
+    srs_close_stfd(stfd); //关闭stfd
 }
 
 int SrsConnection::start()
 {
     return pthread->start();
 }
-
+//connection协程的循环
 int SrsConnection::cycle()
 {
     int ret = ERROR_SUCCESS;
-    
+    //srs_id
     _srs_context->generate_id();
     id = _srs_context->get_id();
     
     ip = srs_get_peer_ip(st_netfd_fileno(stfd));
-    
+    /*
+     * 调用do_cycle，由子类重写
+     * 如果是rtmp连接，调用 SrsRtmpConn::do_cycle
+     * */
     ret = do_cycle();
-    
+
     // if socket io error, set to closed.
     if (srs_is_client_gracefully_close(ret)) {
         ret = ERROR_SOCKET_CLOSED;
@@ -106,6 +110,7 @@ int SrsConnection::cycle()
     return ERROR_SUCCESS;
 }
 
+//当协程停止时，移除这个连接
 void SrsConnection::on_thread_stop()
 {
     // TODO: FIXME: never remove itself, use isolate thread to do cleanup.

@@ -38,15 +38,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 * convert basic types to bytes,
 * build basic types from bytes.
 */
+//用于流的读写，一个流是时一串数据，需要转换为byte数据
 class SrsStream
 {
 private:
     // current position at bytes.
-    char* p;
+    char* p; //当前指针
     // the bytes data for stream to read or write.
-    char* bytes;
+    char* bytes; //读写的字节数
     // the total number of bytes.
-    int nb_bytes;
+    int nb_bytes; //总的字节数
 public:
     SrsStream();
     virtual ~SrsStream();
@@ -59,6 +60,7 @@ public:
     * @remark, return error when bytes NULL.
     * @remark, return error when size is not positive.
     */
+    //初始化，b为需要转换的字节流，长度为nb
     virtual int initialize(char* b, int nb);
 // get the status of stream
 public:
@@ -66,26 +68,27 @@ public:
     * get data of stream, set by initialize.
     * current bytes = data() + pos()
     */
-    virtual char* data();
+    virtual char* data(); //获取数据
     /**
     * the total stream size, set by initialize.
     * left bytes = size() - pos().
     */
-    virtual int size();
+    virtual int size(); //获取长度
     /**
     * tell the current pos.
     */
-    virtual int pos();
+    virtual int pos(); //当前位置
     /**
     * whether stream is empty.
     * if empty, user should never read or write.
     */
-    virtual bool empty();
+    virtual bool empty(); //判断是否为空
     /**
     * whether required size is ok.
     * @return true if stream can read/write specified required_size bytes.
     * @remark assert required_size positive.
     */
+    //需求的读写size超过容量
     virtual bool require(int required_size);
 // to change stream.
 public:
@@ -95,7 +98,7 @@ public:
     * @remark to skip(pos()) to reset stream.
     * @remark assert initialized, the data() not NULL.
     */
-    virtual void skip(int size);
+    virtual void skip(int size); //跳过size
 public:
     /**
     * get 1bytes char from stream.
@@ -120,11 +123,11 @@ public:
     /**
     * get string from stream, length specifies by param len.
     */
-    virtual std::string read_string(int len);
+    virtual std::string read_string(int len); //读string
     /**
     * get bytes from stream, length specifies by param len.
     */
-    virtual void read_bytes(char* data, int size);
+    virtual void read_bytes(char* data, int size); //读bytes
 public:
     /**
     * write 1bytes char to stream.

@@ -98,7 +98,7 @@ public:
 /**
 * tcp listener.
 */
-//tcp监听
+//tcp监听，继承SrsListener和ISrsTcpHandler
 class SrsStreamListener : virtual public SrsListener, virtual public ISrsTcpHandler
 {
 private:

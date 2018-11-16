@@ -109,6 +109,7 @@ public:
 *       kbps->add_delta(delta);
 *       delta->cleanup();
 */
+//统计流量，比如一分钟这个客户端用了多少流量
 class IKbpsDelta
 {
 public:

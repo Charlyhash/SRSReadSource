@@ -780,6 +780,7 @@ int ff_hex_to_data(u_int8_t* data, const char* p)
     return len;
 }
 
+//类型0头部，包含所有信息
 int srs_chunk_header_c0(
     int perfer_cid, u_int32_t timestamp, int32_t payload_length,
     int8_t message_type, int32_t stream_id,
@@ -797,10 +798,12 @@ int srs_chunk_header_c0(
     }
     
     // write new chunk stream header, fmt is 0
+    //1. head type: 00+streamID
     *p++ = 0x00 | (perfer_cid & 0x3F);
     
     // chunk message header, 11 bytes
     // timestamp, 3bytes, big-endian
+    //2. timestamp
     if (timestamp < RTMP_EXTENDED_TIMESTAMP) {
         pp = (char*)&timestamp;
         *p++ = pp[2];
@@ -813,15 +816,18 @@ int srs_chunk_header_c0(
     }
     
     // message_length, 3bytes, big-endian
+    //3. message length
     pp = (char*)&payload_length;
     *p++ = pp[2];
     *p++ = pp[1];
     *p++ = pp[0];
     
     // message_type, 1bytes
+    // 4. message type
     *p++ = message_type;
     
     // stream_id, 4bytes, little-endian
+    // 5. stream id
     pp = (char*)&stream_id;
     *p++ = pp[0];
     *p++ = pp[1];
@@ -858,6 +864,7 @@ int srs_chunk_header_c0(
     return p - cache;
 }
 
+//类型3的头部，只包含类型
 int srs_chunk_header_c3(
     int perfer_cid, u_int32_t timestamp,
     char* cache, int nb_cache

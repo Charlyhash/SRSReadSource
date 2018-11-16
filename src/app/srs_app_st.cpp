@@ -72,10 +72,11 @@ int64_t SrsStSocket::get_send_bytes()
     return send_bytes;
 }
 
+//从stfd读取size个字节到buf，nread为读取的字节数
 int SrsStSocket::read(void* buf, size_t size, ssize_t* nread)
 {
     int ret = ERROR_SUCCESS;
-    
+    //st_read读取
     ssize_t nb_read = st_read(stfd, buf, size, recv_timeout);
     if (nread) {
         *nread = nb_read;
@@ -84,28 +85,29 @@ int SrsStSocket::read(void* buf, size_t size, ssize_t* nread)
     // On success a non-negative integer indicating the number of bytes actually read is returned
     // (a value of 0 means the network connection is closed or end of file is reached).
     // Otherwise, a value of -1 is returned and errno is set to indicate the error.
+    //出错处理处理
     if (nb_read <= 0) {
         // @see https://github.com/ossrs/srs/issues/200
-        if (nb_read < 0 && errno == ETIME) {
+        if (nb_read < 0 && errno == ETIME) { //超时
             return ERROR_SOCKET_TIMEOUT;
         }
         
-        if (nb_read == 0) {
+        if (nb_read == 0) { //断开连接
             errno = ECONNRESET;
         }
         
-        return ERROR_SOCKET_READ;
+        return ERROR_SOCKET_READ; //读取错误
     }
     
-    recv_bytes += nb_read;
+    recv_bytes += nb_read; //读取到的字节增加nb_read
     
     return ret;
 }
-
+//一次读取完
 int SrsStSocket::read_fully(void* buf, size_t size, ssize_t* nread)
 {
     int ret = ERROR_SUCCESS;
-    
+    //st_read_fully读取所有的字节
     ssize_t nb_read = st_read_fully(stfd, buf, size, recv_timeout);
     if (nread) {
         *nread = nb_read;
@@ -132,6 +134,7 @@ int SrsStSocket::read_fully(void* buf, size_t size, ssize_t* nread)
     return ret;
 }
 
+//将buf中的size个字节写入到stfd, nwrite为写入的字节数
 int SrsStSocket::write(void* buf, size_t size, ssize_t* nwrite)
 {
     int ret = ERROR_SUCCESS;
@@ -156,7 +159,7 @@ int SrsStSocket::write(void* buf, size_t size, ssize_t* nwrite)
     
     return ret;
 }
-
+//将iov_size个iov写入到stfd, nwrite为写入的个数
 int SrsStSocket::writev(const iovec *iov, int iov_size, ssize_t* nwrite)
 {
     int ret = ERROR_SUCCESS;

@@ -75,13 +75,16 @@ using namespace std;
 // when edge timeout, retry next.
 #define SRS_EDGE_TOKEN_TRAVERSE_TIMEOUT_US (int64_t)(3*1000*1000LL)
 
+//构造函数
 SrsRtmpConn::SrsRtmpConn(SrsServer* svr, st_netfd_t c)
     : SrsConnection(svr, c)
 {
     server = svr;
     req = new SrsRequest();
     res = new SrsResponse();
+    //将客户端的fd传给了StSocket类，skt可以对客户端读写数据
     skt = new SrsStSocket(c);
+    //RtmpServer类接受skt
     rtmp = new SrsRtmpServer(skt);
     refer = new SrsRefer();
     bandwidth = new SrsBandwidth();
@@ -100,7 +103,7 @@ SrsRtmpConn::SrsRtmpConn(SrsServer* svr, st_netfd_t c)
     
     _srs_config->subscribe(this);
 }
-
+//析构函数
 SrsRtmpConn::~SrsRtmpConn()
 {
     _srs_config->unsubscribe(this);
@@ -115,26 +118,32 @@ SrsRtmpConn::~SrsRtmpConn()
     srs_freep(kbps);
 }
 
+//弃用这个连接
 void SrsRtmpConn::dispose()
 {
     SrsConnection::dispose();
     
     // wakeup the handler which need to notice.
     if (wakable) {
-        wakable->wakeup();
+        wakable->wakeup(); //唤醒
     }
 }
 
 // TODO: return detail message when error for client.
+/*
+ * 当连接到来，开启了一个协程用于处理连接，调用SrsConnection::cycle()
+ * 在cycle中调用do_cycle。SrsRtmpConn重写该函数，最终rtmp连接由
+ * SrsRtmpConn::do_cycle()处理
+ */
 int SrsRtmpConn::do_cycle()
 {
     int ret = ERROR_SUCCESS;
     
     srs_trace("RTMP client ip=%s", ip.c_str());
-
+    //设置接收和发送的超时时间，都是30s
     rtmp->set_recv_timeout(SRS_CONSTS_RTMP_RECV_TIMEOUT_US);
     rtmp->set_send_timeout(SRS_CONSTS_RTMP_SEND_TIMEOUT_US);
-    
+    //rtmp握手
     if ((ret = rtmp->handshake()) != ERROR_SUCCESS) {
         srs_error("rtmp handshake failed. ret=%d", ret);
         return ret;

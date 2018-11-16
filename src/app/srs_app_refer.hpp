@@ -33,6 +33,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 class SrsConfDirective;
 
+//限制ip
 class SrsRefer
 {
 public:

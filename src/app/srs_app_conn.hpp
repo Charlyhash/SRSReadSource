@@ -41,6 +41,7 @@ class SrsConnection;
 /**
  * the manager for connection.
  */
+//连接管理类，用于移除一个连接
 class IConnectionManager
 {
 public:
@@ -58,6 +59,7 @@ public:
 * all connections accept from listener must extends from this base class,
 * server will add the connection to manager, and delete it when remove.
 */
+//基本的连接类，包含一个IConnectionManager，用于删除连接
 class SrsConnection : public virtual ISrsOneCycleThreadHandler, public virtual IKbpsDelta
 {
 private:
@@ -69,7 +71,7 @@ private:
     /**
     * the id of connection.
     */
-    int id;
+    int id; //connection的id
 protected:
     /**
     * the manager object to manage the connection.
@@ -78,29 +80,29 @@ protected:
     /**
     * the underlayer st fd handler.
     */
-    st_netfd_t stfd;
+    st_netfd_t stfd; //连接的fd
     /**
     * the ip of client.
     */
-    std::string ip;
+    std::string ip; //连接的对端ip
     /**
      * whether the connection is disposed,
      * when disposed, connection should stop cycle and cleanup itself.
      */
-    bool disposed;
+    bool disposed; //判断是否disposed
     /**
      * whether connection is expired, application definition.
      * when expired, the connection must never be served and quit ASAP.
      */
-    bool expired;
+    bool expired; //判断是否expired
 public:
     SrsConnection(IConnectionManager* cm, st_netfd_t c);
     virtual ~SrsConnection();
 public:
     /**
-     * to dipose the connection.
+     * to dispose the connection.
      */
-    virtual void dispose();
+    virtual void dispose(); //dispose the connection.
     /**
     * start the client green thread.
     * when server get a client from listener, 
@@ -110,7 +112,7 @@ public:
     * when client cycle thread stop, invoke the on_thread_stop(), which will use server
     * to remove the client by server->remove(this).
     */
-    virtual int start();
+    virtual int start(); //启动连接协程
 // interface ISrsOneCycleThreadHandler
 public:
     /**
@@ -118,22 +120,22 @@ public:
     * when serve connection completed, terminate the loop which will terminate the thread,
     * thread will invoke the on_thread_stop() when it terminated.
     */
-    virtual int cycle();
+    virtual int cycle(); //协程的循环函数
     /**
     * when the thread cycle finished, thread will invoke the on_thread_stop(),
     * which will remove self from server, server will remove the connection from manager 
     * then delete the connection.
     */
-    virtual void on_thread_stop();
+    virtual void on_thread_stop(); //当协程退出，需要删除连接
 public:
     /**
     * get the srs id which identify the client.
     */
-    virtual int srs_id();
+    virtual int srs_id(); //获取客户端id,srs_id
     /**
      * set connection to expired.
      */
-    virtual void expire();
+    virtual void expire(); //设置过期
 protected:
     /**
     * for concrete connection to do the cycle.

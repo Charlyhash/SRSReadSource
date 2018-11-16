@@ -1,0 +1,18 @@
+C/S: Handshake
+C: ConnectApp() tcUrl=xxx
+S: Ack Size 2500,000
+S: Set Peer Bandwidth 2500,000
+S: Set Chunk Size 60,000
+C: Set Chunk Size 60,000
+S: ConnectApp() _result
+S: onBWDone()
+
+C: releaseStream+FCPublish(s0)
+C: createStream()
+S: releaseStream _result
+C: _checkbw()
+S: FCPublish() _result
+S: createStream() _result
+C: publish(s0)
+S: onFCPublish()
+S: onStatus()

@@ -59,43 +59,44 @@ class ISrsWakable;
 /**
 * the client provides the main logic control for RTMP clients.
 */
+//rtmp连接的抽象
 class SrsRtmpConn : public virtual SrsConnection, public virtual ISrsReloadHandler
 {
     // for the thread to directly access any field of connection.
     friend class SrsPublishRecvThread;
 private:
-    SrsServer* server;
-    SrsRequest* req;
-    SrsResponse* res;
-    SrsStSocket* skt;
-    SrsRtmpServer* rtmp;
-    SrsRefer* refer;
-    SrsBandwidth* bandwidth;
-    SrsSecurity* security;
+    SrsServer* server; //服务
+    SrsRequest* req; //请求
+    SrsResponse* res; //响应
+    SrsStSocket* skt; //用于读写socket
+    SrsRtmpServer* rtmp; //rtmp server
+    SrsRefer* refer; //限制ip访问
+    SrsBandwidth* bandwidth; //带宽检测
+    SrsSecurity* security; //安全，用于限制推流
     // the wakable handler, maybe NULL.
-    ISrsWakable* wakable;
+    ISrsWakable* wakable; //可唤醒
     // elapse duration in ms
     // for live play duration, for instance, rtmpdump to record.
     // @see https://github.com/ossrs/srs/issues/47
-    int64_t duration;
-    SrsKbps* kbps;
+    int64_t duration; //过去的时间
+    SrsKbps* kbps; //统计流量
     // the MR(merged-write) sleep time in ms.
-    int mw_sleep;
+    int mw_sleep; //合并写休眠时间
     // the MR(merged-write) only enabled for play.
-    int mw_enabled;
+    int mw_enabled; //合并写是否可用
     // for realtime
     // @see https://github.com/ossrs/srs/issues/257
-    bool realtime;
+    bool realtime; //是否为实时
     // the minimal interval in ms for delivery stream.
-    double send_min_interval;
+    double send_min_interval; //发送流的最小时间间隔
     // publish 1st packet timeout in ms
-    int publish_1stpkt_timeout;
+    int publish_1stpkt_timeout; //发送一个packet的超时时间
     // publish normal packet timeout in ms
-    int publish_normal_timeout;
+    int publish_normal_timeout; //推流超时时间
     // whether enable the tcp_nodelay.
-    bool tcp_nodelay;
+    bool tcp_nodelay; //tcp nodelay是否可用
     // The type of client, play or publish.
-    SrsRtmpConnType client_type;
+    SrsRtmpConnType client_type; //客户端类型：play/publish
 public:
     SrsRtmpConn(SrsServer* svr, st_netfd_t c);
     virtual ~SrsRtmpConn();
@@ -105,6 +106,7 @@ protected:
     virtual int do_cycle();
 // interface ISrsReloadHandler
 public:
+    //reload的回调
     virtual int on_reload_vhost_removed(std::string vhost);
     virtual int on_reload_vhost_mw(std::string vhost);
     virtual int on_reload_vhost_smi(std::string vhost);
@@ -114,6 +116,7 @@ public:
     virtual int on_reload_vhost_pnt(std::string vhost);
 // interface IKbpsDelta
 public:
+    //流量统计
     virtual void resample();
     virtual int64_t get_send_bytes_delta();
     virtual int64_t get_recv_bytes_delta();
@@ -124,8 +127,10 @@ private:
     // stream(play/publish) service cycle, identify client first.
     virtual int stream_service_cycle();
     virtual int check_vhost();
+    //播放流
     virtual int playing(SrsSource* source);
     virtual int do_playing(SrsSource* source, SrsConsumer* consumer, SrsQueueRecvThread* trd);
+    //发布流
     virtual int publishing(SrsSource* source);
     virtual int do_publishing(SrsSource* source, SrsPublishRecvThread* trd);
     virtual int acquire_publish(SrsSource* source, bool is_edge);

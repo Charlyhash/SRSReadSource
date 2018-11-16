@@ -114,6 +114,7 @@ std::string srs_listener_type2string(SrsListenerType type)
     }
 }
 
+//构造函数
 SrsListener::SrsListener(SrsServer* svr, SrsListenerType t)
 {
     port = 0;
@@ -140,6 +141,7 @@ SrsStreamListener::~SrsStreamListener()
     srs_freep(listener);
 }
 
+//监听
 int SrsStreamListener::listen(string i, int p)
 {
     int ret = ERROR_SUCCESS;
@@ -169,7 +171,7 @@ int SrsStreamListener::listen(string i, int p)
 int SrsStreamListener::on_tcp_client(st_netfd_t stfd)
 {
     int ret = ERROR_SUCCESS;
-    //server连接
+    //交给server处理
     if ((ret = server->accept_client(type, stfd)) != ERROR_SUCCESS) {
         srs_warn("accept client error. ret=%d", ret);
         return ret;
@@ -416,34 +418,34 @@ int SrsSignalManager::initialize()
 int SrsSignalManager::start()
 {
     /**
-    * Note that if multiple processes are used (see below), 
-    * the signal pipe should be initialized after the fork(2) call 
+    * Note that if multiple processes are used (see below),
+    * the signal pipe should be initialized after the fork(2) call
     * so that each process has its own private pipe.
     */
     struct sigaction sa;
-    
+
     /* Install sig_catcher() as a signal handler */
     //设置信号处理函数并添加到监听信号里
     sa.sa_handler = SrsSignalManager::sig_catcher;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGNAL_RELOAD, &sa, NULL);
-    
+
     sa.sa_handler = SrsSignalManager::sig_catcher;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGTERM, &sa, NULL);
-    
+
     sa.sa_handler = SrsSignalManager::sig_catcher;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
-    
+
     sa.sa_handler = SrsSignalManager::sig_catcher;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGUSR2, &sa, NULL);
-    
+
     srs_trace("signal installed");
     //启动协程，调用cycle()函数
     return pthread->start();
@@ -751,19 +753,19 @@ int SrsServer::acquire_pid_file()
 int SrsServer::listen()
 {
     int ret = ERROR_SUCCESS;
-    
+    //监听rtmp
     if ((ret = listen_rtmp()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //监听http_api
     if ((ret = listen_http_api()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //监听http_stream
     if ((ret = listen_http_stream()) != ERROR_SUCCESS) {
         return ret;
     }
-    
+    //监听stream caster
     if ((ret = listen_stream_caster()) != ERROR_SUCCESS) {
         return ret;
     }
@@ -923,7 +925,7 @@ void SrsServer::remove(SrsConnection* conn)
     srs_freep(conn);
 }
 
-//服务队信号进行处理
+//服务对信号进行处理
 void SrsServer::on_signal(int signo)
 {
     if (signo == SIGNAL_RELOAD) {
@@ -1087,17 +1089,19 @@ int SrsServer::do_cycle()
     return ret;
 }
 
+//监听rtmp
 int SrsServer::listen_rtmp()
 {
     int ret = ERROR_SUCCESS;
     
-    // stream service port.
+    //读取配置文件，得到流的端口
     std::vector<std::string> ip_ports = _srs_config->get_listens();
     srs_assert((int)ip_ports.size() > 0);
     
     close_listeners(SrsListenerRtmpStream);
-    
+    //对每个端口都开启一个监听
     for (int i = 0; i < (int)ip_ports.size(); i++) {
+        //创建stream listener
         SrsListener* listener = new SrsStreamListener(this, SrsListenerRtmpStream);
         listeners.push_back(listener);
         
@@ -1255,12 +1259,13 @@ void SrsServer::resample_kbps()
     srs_update_rtmp_server((int)conns.size(), kbps);
 }
 
+//连接到来的处理
 int SrsServer::accept_client(SrsListenerType type, st_netfd_t client_stfd)
 {
     int ret = ERROR_SUCCESS;
     
     int fd = st_netfd_fileno(client_stfd);
-    
+    //获取最大连接数，当超过最大连接了就断开连接
     int max_connections = _srs_config->get_max_connections();
     if ((int)conns.size() >= max_connections) {
         srs_error("exceed the max connections, drop client: "
@@ -1275,12 +1280,17 @@ int SrsServer::accept_client(SrsListenerType type, st_netfd_t client_stfd)
     // @see https://github.com/ossrs/srs/issues/518
     if (true) {
         int val;
+        //返回标志位
         if ((val = fcntl(fd, F_GETFD, 0)) < 0) {
             ret = ERROR_SYSTEM_PID_GET_FILE_INFO;
             srs_error("fnctl F_GETFD error! fd=%d. ret=%#x", fd, ret);
             srs_close_stfd(client_stfd);
             return ret;
         }
+        /*
+         * 设置了FD_CLOEXEC，使用execl执行的程序里，此描述符被关闭，不能再使用它，但是
+         * 在使用fork调用的子进程中，此描述符并不关闭，仍可使用。
+         * */
         val |= FD_CLOEXEC;
         if (fcntl(fd, F_SETFD, val) < 0) {
             ret = ERROR_SYSTEM_PID_SET_FILE_INFO;
@@ -1289,7 +1299,7 @@ int SrsServer::accept_client(SrsListenerType type, st_netfd_t client_stfd)
             return ret;
         }
     }
-    
+    //SrsConnection是对一次连接的抽象
     SrsConnection* conn = NULL;
     if (type == SrsListenerRtmpStream) {
         conn = new SrsRtmpConn(this, client_stfd);
@@ -1315,11 +1325,13 @@ int SrsServer::accept_client(SrsListenerType type, st_netfd_t client_stfd)
     srs_assert(conn);
     
     // directly enqueue, the cycle thread will remove the client.
+    //存放到队列中
     conns.push_back(conn);
     srs_verbose("add conn to vector.");
     
     // cycle will start process thread and when finished remove the client.
     // @remark never use the conn, for it maybe destroyed.
+    //启动连接协程
     if ((ret = conn->start()) != ERROR_SUCCESS) {
         return ret;
     }

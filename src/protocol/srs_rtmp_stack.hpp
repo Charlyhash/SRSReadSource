@@ -77,19 +77,33 @@ class SrsCallPacket;
 /**
  * amf0 command message, command name macros
  */
+ //C->S 连接到服务器的某个App
 #define RTMP_AMF0_COMMAND_CONNECT               "connect"
+//C->S 创建流
 #define RTMP_AMF0_COMMAND_CREATE_STREAM         "createStream"
+//C->S 关闭流
 #define RTMP_AMF0_COMMAND_CLOSE_STREAM          "closeStream"
+//C->S 播放
 #define RTMP_AMF0_COMMAND_PLAY                  "play"
+//C->S 暂停
 #define RTMP_AMF0_COMMAND_PAUSE                 "pause"
+//S->C 带宽检测完成
 #define RTMP_AMF0_COMMAND_ON_BW_DONE            "onBWDone"
+//S->C 返回状态
 #define RTMP_AMF0_COMMAND_ON_STATUS             "onStatus"
+//S->C 返回结果
 #define RTMP_AMF0_COMMAND_RESULT                "_result"
+//S->C 返回错误
 #define RTMP_AMF0_COMMAND_ERROR                 "_error"
+//S->C 返回结果
 #define RTMP_AMF0_COMMAND_RELEASE_STREAM        "releaseStream"
+//S->C 发布流
 #define RTMP_AMF0_COMMAND_FC_PUBLISH            "FCPublish"
+//S->C 发布完成
 #define RTMP_AMF0_COMMAND_UNPUBLISH             "FCUnpublish"
+//C->S 客户端向服务端请求publish
 #define RTMP_AMF0_COMMAND_PUBLISH               "publish"
+//S->C 允许数据比如采样形成声音波形
 #define RTMP_AMF0_DATA_SAMPLE_ACCESS            "|RtmpSampleAccess"
 
 /**
@@ -134,6 +148,7 @@ class SrsCallPacket;
  *         we can merge the message and packet, using OOAD hierachy, packet extends from message,
  *         it's better for me to use components -- the message use the packet as payload.
  */
+ //解码message的payload
 class SrsPacket
 {
 public:
@@ -142,10 +157,11 @@ public:
 public:
     /**
      * the subpacket can override this encode,
-     * for example, video and audio will directly set the payload withou memory copy,
+     * for example, video and audio will directly set the payload without memory copy,
      * other packet which need to serialize/encode to bytes by override the
      * get_size and encode_packet.
      */
+     //编码，得到size和payload
     virtual int encode(int& size, char*& payload);
     // decode functions for concrete packet to override.
 public:
@@ -185,17 +201,19 @@ protected:
 * to recv RTMP message from RTMP chunk stream,
 * and to send out RTMP message over RTMP chunk stream.
 */
+//用于收发数据
 class SrsProtocol
 {
 private:
+    //ack窗口大小
     class AckWindowSize
     {
     public:
         uint32_t window;
         // number of received bytes.
-        int64_t nb_recv_bytes;
-        // previous responsed sequence number.
-        uint32_t sequence_number;
+        int64_t nb_recv_bytes; //接收的字节
+        // previous response sequence number.
+        uint32_t sequence_number; //上一个响应的序列号
         
         AckWindowSize();
     };
@@ -204,13 +222,13 @@ private:
     /**
     * underlayer socket object, send/recv bytes.
     */
-    ISrsProtocolReaderWriter* skt;
+    ISrsProtocolReaderWriter* skt; //底层读写的socket
     /**
     * requests sent out, used to build the response.
     * key: transactionId
     * value: the request command name
     */
-    std::map<double, std::string> requests;
+    std::map<double, std::string> requests; //请求的id及对应的名字
 // peer in
 private:
     /**
@@ -222,22 +240,22 @@ private:
     * cs_cache, the chunk stream cache.
     * @see https://github.com/ossrs/srs/issues/249
     */
-    SrsChunkStream** cs_cache;
+    SrsChunkStream** cs_cache; //缓存的经常使用的chunk header
     /**
     * bytes buffer cache, recv from skt, provide services for stream.
     */
-    SrsFastBuffer* in_buffer;
+    SrsFastBuffer* in_buffer; //接收的buffer
     /**
     * input chunk size, default to 128, set by peer packet.
     */
-    int32_t in_chunk_size;
+    int32_t in_chunk_size; //int chunk size
     // The input ack window, to response acknowledge to peer,
-    // for example, to respose the encoder, for server got lots of packets.
-    AckWindowSize in_ack_size;
+    // for example, to response the encoder, for server got lots of packets.
+    AckWindowSize in_ack_size; //接收窗口大小
     // The output ack window, to require peer to response the ack.
-    AckWindowSize out_ack_size;
+    AckWindowSize out_ack_size; //发送窗口大小
     // The buffer length set by peer.
-    int32_t in_buffer_length;
+    int32_t in_buffer_length; //buffer长度
     // Whether print the protocol level debug info.
     // Generally we print the debug info when got or send first A/V packet.
     bool show_debug_info;
@@ -246,11 +264,11 @@ private:
     * default to true for it's very easy to use the protocol stack.
     * @see: https://github.com/ossrs/srs/issues/217
     */
-    bool auto_response_when_recv;
+    bool auto_response_when_recv; //是否自动回复
     /**
     * when not auto response message, manual flush the messages in queue.
     */
-    std::vector<SrsPacket*> manual_response_queue;
+    std::vector<SrsPacket*> manual_response_queue; //要回复的消息队列
 // peer out
 private:
     /**
@@ -258,8 +276,8 @@ private:
     * initialize to iovec[SRS_CONSTS_IOVS_MAX] and realloc when consumed,
     * it's ok to realloc the iovs cache, for all ptr is ok.
     */
-    iovec* out_iovs;
-    int nb_out_iovs;
+    iovec* out_iovs; //发送消息的缓存
+    int nb_out_iovs; //发送缓存的大小
     /**
     * output header cache.
     * used for type0, 11bytes(or 15bytes with extended timestamp) header.
@@ -268,13 +286,13 @@ private:
     * 
     * @remark, the c0c3 cache cannot be realloc.
     */
-    char out_c0c3_caches[SRS_CONSTS_C0C3_HEADERS_MAX];
+    char out_c0c3_caches[SRS_CONSTS_C0C3_HEADERS_MAX]; //c0c3的缓存
     // whether warned user to increase the c0c3 header cache.
     bool warned_c0c3_cache_dry;
     /**
     * output chunk size, default to 128, set by config.
     */
-    int32_t out_chunk_size;
+    int32_t out_chunk_size; //发送rtmp的chunk size
 public:
     SrsProtocol(ISrsProtocolReaderWriter* io);
     virtual ~SrsProtocol();
@@ -284,6 +302,7 @@ public:
     * @param v, whether auto response message when recv message.
     * @see: https://github.com/ossrs/srs/issues/217
     */
+    //设置自动回复
     virtual void set_auto_response(bool v);
     /**
     * flush for manual response when the auto response is disabled
@@ -302,6 +321,7 @@ public:
     * @param handler the handler when merge read is enabled.
     * @see https://github.com/ossrs/srs/issues/241
     */
+    //合并读
     virtual void set_merge_read(bool v, IMergeReadHandler* handler);
     /**
     * create buffer with specifeid size.
@@ -340,6 +360,7 @@ public:
     *       never NULL if decode success.
     * @remark, drop message when msg is empty or payload length is empty.
     */
+    //接收rtmp message
     virtual int recv_message(SrsCommonMessage** pmsg);
     /**
     * decode bytes oriented RTMP message to RTMP packet,
@@ -347,6 +368,7 @@ public:
     *       always NULL if error, never NULL if success.
     * @return error when unknown packet, error when decode failed.
     */
+    //解码到packet
     virtual int decode_message(SrsCommonMessage* msg, SrsPacket** ppacket);
     /**
     * send the RTMP message and always free it.
@@ -401,6 +423,7 @@ public:
         
         while (true) {
             SrsCommonMessage* msg = NULL;
+            //接收消息
             if ((ret = recv_message(&msg)) != ERROR_SUCCESS) {
                 if (ret != ERROR_SOCKET_TIMEOUT && !srs_is_client_gracefully_close(ret)) {
                     srs_error("recv message failed. ret=%d", ret);
@@ -511,28 +534,28 @@ public:
      * represents the basic header fmt,
      * which used to identify the variant message header type.
      */
-    char fmt;
+    char fmt; //fmt
     /**
      * represents the basic header cid,
      * which is the chunk stream id.
      */
-    int cid;
+    int cid; //chunk stream id
     /**
      * cached message header
      */
-    SrsMessageHeader header;
+    SrsMessageHeader header; //头部
     /**
      * whether the chunk message header has extended timestamp.
      */
-    bool extended_timestamp;
+    bool extended_timestamp; //是否有扩展的时间戳
     /**
      * partially read message.
      */
-    SrsCommonMessage* msg;
+    SrsCommonMessage* msg; //消息
     /**
      * decoded msg count, to identify whether the chunk stream is fresh.
      */
-    int64_t msg_count;
+    int64_t msg_count; //消息计数
 public:
     SrsChunkStream(int _cid);
     virtual ~SrsChunkStream();
@@ -541,11 +564,12 @@ public:
 /**
  * the original request from client.
  */
+ //客户端请求
 class SrsRequest
 {
 public:
     // client ip.
-    std::string ip;
+    std::string ip; //ip
 public:
     /**
      * tcUrl: rtmp://request_vhost:port/app/stream
@@ -553,10 +577,10 @@ public:
      *    rtmp://ip:port/app?vhost=request_vhost/stream
      *    rtmp://ip:port/app...vhost...request_vhost/stream
      */
-    std::string tcUrl;
+    std::string tcUrl; //流地址
     std::string pageUrl;
     std::string swfUrl;
-    double objectEncoding;
+    double objectEncoding; //
     // data discovery from request.
 public:
     // discovery from tcUrl and play/publish.
@@ -577,7 +601,7 @@ public:
     // used to specified the stop when exceed the duration.
     // @see https://github.com/ossrs/srs/issues/45
     // in ms.
-    double duration;
+    double duration; //时长
     // the token in the connect request,
     // used for edge traverse to origin authentication,
     // @see https://github.com/ossrs/srs/issues/104
@@ -591,21 +615,21 @@ public:
      * for when initialize the source, the request is valid,
      * when reload it, the request maybe invalid, so need to copy it.
      */
-    virtual SrsRequest* copy();
+    virtual SrsRequest* copy(); //复制
     /**
      * update the auth info of request,
      * to keep the current request ptr is ok,
      * for many components use the ptr of request.
      */
-    virtual void update_auth(SrsRequest* req);
+    virtual void update_auth(SrsRequest* req); //更新请求认证信息
     /**
      * get the stream identify, vhost/app/stream.
      */
-    virtual std::string get_stream_url();
+    virtual std::string get_stream_url(); //获取流
     /**
      * strip url, user must strip when update the url.
      */
-    virtual void strip();
+    virtual void strip(); //从stream url中得到各种参数
 public:
     // Transform it as HTTP request.
     virtual SrsRequest* as_http();
@@ -620,7 +644,7 @@ public:
     /**
      * the stream id to response client createStream.
      */
-    int stream_id;
+    int stream_id; //流id
 public:
     SrsResponse();
     virtual ~SrsResponse();
@@ -629,6 +653,7 @@ public:
 /**
  * the rtmp client type.
  */
+ //rtmp客户端类型
 enum SrsRtmpConnType
 {
     SrsRtmpConnUnknown,
@@ -637,13 +662,17 @@ enum SrsRtmpConnType
     SrsRtmpConnFlashPublish,
     SrsRtmpConnHaivisionPublish,
 };
+
+//根据rtmp连接类型得到对应的字符串
 std::string srs_client_type_string(SrsRtmpConnType type);
+//判断客户端是不是publish
 bool srs_client_type_is_publish(SrsRtmpConnType type);
 
 /**
  * store the handshake bytes,
  * for smart switch between complex and simple handshake.
  */
+ //握手
 class SrsHandshakeBytes
 {
 public:
@@ -671,10 +700,10 @@ public:
 class SrsRtmpClient
 {
 private:
-    SrsHandshakeBytes* hs_bytes;
+    SrsHandshakeBytes* hs_bytes; //握手字节
 protected:
-    SrsProtocol* protocol;
-    ISrsProtocolReaderWriter* io;
+    SrsProtocol* protocol; //数据收发
+    ISrsProtocolReaderWriter* io; //读写的io
 public:
     SrsRtmpClient(ISrsProtocolReaderWriter* skt);
     virtual ~SrsRtmpClient();
@@ -741,15 +770,15 @@ public:
     /**
      * handshake with server, try complex, then simple handshake.
      */
-    virtual int handshake();
+    virtual int handshake(); //握手
     /**
      * only use simple handshake
      */
-    virtual int simple_handshake();
+    virtual int simple_handshake(); //简单握手
     /**
      * only use complex handshake
      */
-    virtual int complex_handshake();
+    virtual int complex_handshake(); //复杂握手
     /**
      * set req to use the original request of client:
      *      pageUrl and swfUrl for refer antisuck.
@@ -825,12 +854,13 @@ public:
  * a high level protocol, media stream oriented services,
  * such as connect to vhost/app, play stream, get audio/video data.
  */
+ //rtmp server提供rtmp command protocol服务
 class SrsRtmpServer
 {
 private:
-    SrsHandshakeBytes* hs_bytes;
-    SrsProtocol* protocol;
-    ISrsProtocolReaderWriter* io;
+    SrsHandshakeBytes* hs_bytes; //握手字节
+    SrsProtocol* protocol; //协议相关，完成具体的发送和接收
+    ISrsProtocolReaderWriter* io; //收发数据
 public:
     SrsRtmpServer(ISrsProtocolReaderWriter* skt);
     virtual ~SrsRtmpServer();
@@ -841,6 +871,7 @@ public:
      * @param v, whether auto response message when recv message.
      * @see: https://github.com/ossrs/srs/issues/217
      */
+
     virtual void set_auto_response(bool v);
 #ifdef SRS_PERF_MERGED_READ
     /**
@@ -887,6 +918,7 @@ public:
      *       never NULL if decode success.
      * @remark, drop message when msg is empty or payload length is empty.
      */
+     //接收消息，需要decode
     virtual int recv_message(SrsCommonMessage** pmsg);
     /**
      * decode bytes oriented RTMP message to RTMP packet,
@@ -894,6 +926,7 @@ public:
      *       always NULL if error, never NULL if success.
      * @return error when unknown packet, error when decode failed.
      */
+     //decode接收的消息，转为packet
     virtual int decode_message(SrsCommonMessage* msg, SrsPacket** ppacket);
     /**
      * send the RTMP message and always free it.
@@ -902,6 +935,7 @@ public:
      * @param msg, the msg to send out, never be NULL.
      * @param stream_id, the stream id of packet to send over, 0 for control message.
      */
+     //发送消息，并释放
     virtual int send_and_free_message(SrsSharedPtrMessage* msg, int stream_id);
     /**
      * send the RTMP message and always free it.
@@ -914,6 +948,7 @@ public:
      * @remark performance issue, to support 6k+ 250kbps client,
      *       @see https://github.com/ossrs/srs/issues/194
      */
+     //发送多条消息
     virtual int send_and_free_messages(SrsSharedPtrMessage** msgs, int nb_msgs, int stream_id);
     /**
      * send the RTMP packet and always free it.
@@ -922,36 +957,44 @@ public:
      * @param packet, the packet to send out, never be NULL.
      * @param stream_id, the stream id of packet to send over, 0 for control message.
      */
+     //发送packet
     virtual int send_and_free_packet(SrsPacket* packet, int stream_id);
 public:
     /**
      * handshake with client, try complex then simple.
      */
+     //握手
     virtual int handshake();
     /**
      * do connect app with client, to discovery tcUrl.
      */
+     //connect_app，客户端发送connect消息后的处理
     virtual int connect_app(SrsRequest* req);
     /**
      * set ack size to client, client will send ack-size for each ack window
      */
+     //窗口确认大小到客户端
     virtual int set_window_ack_size(int ack_size);
     /**
      * @type: The sender can mark this message hard (0), soft (1), or dynamic (2)
      * using the Limit type field.
      */
+     //设置对方带宽
     virtual int set_peer_bandwidth(int bandwidth, int type);
     /**
      * @param server_ip the ip of server.
      */
+     //响应客户端的connect_app, 告诉client连接成功
     virtual int response_connect_app(SrsRequest* req, const char* server_ip = NULL);
     /**
      * reject the connect app request.
      */
+     //拒绝客户端connect app
     virtual void response_connect_reject(SrsRequest* req, const char* desc);
     /**
      * response client the onBWDone message.
      */
+     //响应onBWDone消息
     virtual int on_bw_done();
     /**
      * recv some message to identify the client.
@@ -961,10 +1004,12 @@ public:
      * @stream_name, output the client publish/play stream name. @see: SrsRequest.stream
      * @duration, output the play client duration. @see: SrsRequest.duration
      */
+     //确认客户端
     virtual int identify_client(int stream_id, SrsRtmpConnType& type, std::string& stream_name, double& duration);
     /**
      * set the chunk size when client type identified.
      */
+     //设置chunk
     virtual int set_chunk_size(int chunk_size);
     /**
      * when client type is play, response with packets:
@@ -973,6 +1018,7 @@ public:
      * |RtmpSampleAccess(false, false),
      * onStatus(NetStream.Data.Start).
      */
+     //client是play的响应
     virtual int start_play(int stream_id);
     /**
      * when client(type is play) send pause message,
@@ -983,6 +1029,7 @@ public:
      *     onStatus(NetStream.Unpause.Notify)
      *     StreamBegin
      */
+     //client pause响应
     virtual int on_play_client_pause(int stream_id, bool is_pause);
     /**
      * when client type is publish, response with packets:
@@ -993,21 +1040,25 @@ public:
      * onFCPublish(NetStream.Publish.Start)
      * onStatus(NetStream.Publish.Start)
      */
+     //client是publish
     virtual int start_fmle_publish(int stream_id);
     /**
      * For encoder of Haivision, response the startup request.
      * @see https://github.com/ossrs/srs/issues/844
      */
+     //haivison的publish, 和ffmpeg不太一样
     virtual int start_haivision_publish(int stream_id);
     /**
      * process the FMLE unpublish event.
      * @unpublish_tid the unpublish request transaction id.
      */
+     //unpublish的处理
     virtual int fmle_unpublish(int stream_id, double unpublish_tid);
     /**
      * when client type is publish, response with packets:
      * onStatus(NetStream.Publish.Start)
      */
+     //onStatus
     virtual int start_flash_publish(int stream_id);
 public:
     /**
@@ -1033,11 +1084,13 @@ public:
         return protocol->expect_message<T>(pmsg, ppacket);
     }
 private:
+    //确认推流客户端
     virtual int identify_create_stream_client(SrsCreateStreamPacket* req, int stream_id, SrsRtmpConnType& type, std::string& stream_name, double& duration);
     virtual int identify_fmle_publish_client(SrsFMLEStartPacket* req, SrsRtmpConnType& type, std::string& stream_name);
     virtual int identify_haivision_publish_client(SrsFMLEStartPacket* req, SrsRtmpConnType& type, std::string& stream_name);
     virtual int identify_flash_publish_client(SrsPublishPacket* req, SrsRtmpConnType& type, std::string& stream_name);
 private:
+    //确认播放客户端
     virtual int identify_play_client(SrsPlayPacket* req, SrsRtmpConnType& type, std::string& stream_name, double& duration);
 };
 
@@ -1046,6 +1099,7 @@ private:
 * The client sends the connect command to the server to request
 * connection to a server application instance.
 */
+//connect packet:客户端发送connect命令消息到服务的请求连接流的app
 class SrsConnectAppPacket : public SrsPacket
 {
 public:
