@@ -185,7 +185,7 @@ int SrsFastBuffer::grow(ISrsBufferReader* reader, int required_size)
     //
     while (end - p < required_size) {
         ssize_t nread;
-        //读到buffer中，从end开始存
+        //SrsStSocket的reader读到buffer中，从end开始存
         if ((ret = reader->read(end, nb_free_space, &nread)) != ERROR_SUCCESS) {
             return ret;
         }

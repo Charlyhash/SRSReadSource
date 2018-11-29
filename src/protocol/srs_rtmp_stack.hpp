@@ -169,6 +169,7 @@ public:
      * subpacket must override to decode packet from stream.
      * @remark never invoke the super.decode, it always failed.
      */
+     //解码
     virtual int decode(SrsStream* stream);
     // encode functions for concrete packet to override.
 public:
@@ -178,21 +179,25 @@ public:
      * all protocol control messages perfer RTMP_CID_ProtocolControl,
      * SrsSetWindowAckSizePacket is protocol control message.
      */
+     //chunk id
     virtual int get_prefer_cid();
     /**
      * subpacket must override to provide the right message type.
      * the message type set the RTMP message type in header.
      */
+     //消息类型
     virtual int get_message_type();
 protected:
     /**
      * subpacket can override to calc the packet size.
      */
+     //packet大小
     virtual int get_size();
     /**
      * subpacket can override to encode the payload to stream.
      * @remark never invoke the super.encode_packet, it always failed.
      */
+     //编码
     virtual int encode_packet(SrsStream* stream);
 };
 
@@ -413,6 +418,7 @@ public:
      * user should never recv message and convert it, use this method instead.
      * if need to set timeout, use set timeout of SrsProtocol.
      */
+    ///期望收到的消息，T为消息类型
     template<class T>
     int expect_message(SrsCommonMessage** pmsg, T** ppacket)
     {
@@ -423,7 +429,7 @@ public:
         
         while (true) {
             SrsCommonMessage* msg = NULL;
-            //接收消息
+            ///1. 接收消息
             if ((ret = recv_message(&msg)) != ERROR_SUCCESS) {
                 if (ret != ERROR_SOCKET_TIMEOUT && !srs_is_client_gracefully_close(ret)) {
                     srs_error("recv message failed. ret=%d", ret);
@@ -431,7 +437,7 @@ public:
                 return ret;
             }
             srs_verbose("recv message success.");
-            
+            ///2. 解码消息到packet
             SrsPacket* packet = NULL;
             if ((ret = decode_message(msg, &packet)) != ERROR_SUCCESS) {
                 srs_error("decode message failed. ret=%d", ret);
@@ -578,13 +584,13 @@ public:
      *    rtmp://ip:port/app...vhost...request_vhost/stream
      */
     std::string tcUrl; //流地址
-    std::string pageUrl;
-    std::string swfUrl;
-    double objectEncoding; //
+    std::string pageUrl; //客户端页面地址
+    std::string swfUrl; //客户端SWF网址
+    double objectEncoding; //编码类型：AMF0 AMF3
     // data discovery from request.
 public:
     // discovery from tcUrl and play/publish.
-    std::string schema;
+    std::string schema; //协议 rtmp
     // the vhost in tcUrl.
     std::string vhost;
     // the host in tcUrl.
@@ -638,6 +644,7 @@ public:
 /**
  * the response to client.
  */
+ //客户端的响应，包含流id
 class SrsResponse
 {
 public:
@@ -672,7 +679,7 @@ bool srs_client_type_is_publish(SrsRtmpConnType type);
  * store the handshake bytes,
  * for smart switch between complex and simple handshake.
  */
- //握手
+ //握手字节
 class SrsHandshakeBytes
 {
 public:
@@ -1106,11 +1113,11 @@ public:
     /**
     * Name of the command. Set to "connect".
     */
-    std::string command_name;
+    std::string command_name; //名字
     /**
     * Always set to 1.
     */
-    double transaction_id;
+    double transaction_id; //transaction id
     /**
     * Command information object which has the name-value pairs.
     * @remark: alloc in packet constructor, user can directly use it, 
@@ -1824,6 +1831,7 @@ protected:
 * AMF0Data RtmpSampleAccess
 * @remark, user must set the stream_id by SrsCommonMessage.set_packet().
 */
+//设置是否能获取音频和视频快照
 class SrsSampleAccessPacket : public SrsPacket
 {
 public:
@@ -1866,12 +1874,12 @@ public:
     /**
     * Name of metadata. Set to "onMetaData"
     */
-    std::string name;
+    std::string name; //onMetaData
     /**
     * Metadata of stream.
     * @remark, never be NULL, an AMF0 object instance.
     */
-    SrsAmf0Object* metadata;
+    SrsAmf0Object* metadata; //AMF0类型
 public:
     SrsOnMetaDataPacket();
     virtual ~SrsOnMetaDataPacket();
@@ -1895,7 +1903,7 @@ protected:
 class SrsSetWindowAckSizePacket : public SrsPacket
 {
 public:
-    int32_t ackowledgement_window_size;
+    int32_t ackowledgement_window_size; //确认发送窗口大小
 public:
     SrsSetWindowAckSizePacket();
     virtual ~SrsSetWindowAckSizePacket();
@@ -1919,7 +1927,7 @@ protected:
 class SrsAcknowledgementPacket : public SrsPacket
 {
 public:
-    uint32_t sequence_number;
+    uint32_t sequence_number; //序列号
 public:
     SrsAcknowledgementPacket();
     virtual ~SrsAcknowledgementPacket();
@@ -1947,7 +1955,7 @@ public:
     * The maximum chunk size can be 65536 bytes. The chunk size is
     * maintained independently for each direction.
     */
-    int32_t chunk_size;
+    int32_t chunk_size; //发送给对端的chunk size
 public:
     SrsSetChunkSizePacket();
     virtual ~SrsSetChunkSizePacket();
@@ -1981,9 +1989,9 @@ enum SrsPeerBandwidthType
 class SrsSetPeerBandwidthPacket : public SrsPacket
 {
 public:
-    int32_t bandwidth;
+    int32_t bandwidth; //带宽
     // @see: SrsPeerBandwidthType
-    int8_t type;
+    int8_t type; //限制类型
 public:
     SrsSetPeerBandwidthPacket();
     virtual ~SrsSetPeerBandwidthPacket();

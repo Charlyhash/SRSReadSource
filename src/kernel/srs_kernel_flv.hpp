@@ -223,7 +223,7 @@ public:
      * set at decoding, and can be used for directly send message,
      * for example, dispatch to all connections.
      */
-    int perfer_cid;
+    int perfer_cid; //chunk stream id
 public:
     SrsMessageHeader();
     virtual ~SrsMessageHeader();

@@ -710,7 +710,7 @@ int SrsAmf0Object::read(SrsStream* stream)
     
     return ret;
 }
-
+///把object写入到stream中
 int SrsAmf0Object::write(SrsStream* stream)
 {
     int ret = ERROR_SUCCESS;
@@ -721,7 +721,7 @@ int SrsAmf0Object::write(SrsStream* stream)
         srs_error("amf0 write object marker failed. ret=%d", ret);
         return ret;
     }
-    
+    ///写入标记
     stream->write_1bytes(RTMP_AMF0_Object);
     srs_verbose("amf0 write object marker success");
     
@@ -1561,6 +1561,7 @@ int srs_amf0_read_string(SrsStream* stream, string& value)
     return srs_amf0_read_utf8(stream, value);
 }
 
+//写入一个字符串的值
 int srs_amf0_write_string(SrsStream* stream, string value)
 {
     int ret = ERROR_SUCCESS;
@@ -1571,10 +1572,10 @@ int srs_amf0_write_string(SrsStream* stream, string value)
         srs_error("amf0 write string marker failed. ret=%d", ret);
         return ret;
     }
-    
+    //写入标记
     stream->write_1bytes(RTMP_AMF0_String);
     srs_verbose("amf0 write string marker success");
-    
+    //写入value
     return srs_amf0_write_utf8(stream, value);
 }
 
@@ -1686,7 +1687,7 @@ int srs_amf0_write_number(SrsStream* stream, double value)
         srs_error("amf0 write number marker failed. ret=%d", ret);
         return ret;
     }
-    
+    ///写入标记
     stream->write_1bytes(RTMP_AMF0_Number);
     srs_verbose("amf0 write number marker success");
 
@@ -1696,7 +1697,7 @@ int srs_amf0_write_number(SrsStream* stream, double value)
         srs_error("amf0 write number value failed. ret=%d", ret);
         return ret;
     }
-
+    ///写入数字
     int64_t temp = 0x00;
     memcpy(&temp, &value, 8);
     stream->write_8bytes(temp);

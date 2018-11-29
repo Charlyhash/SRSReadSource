@@ -26,9 +26,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <srs_kernel_error.hpp>
 #include <srs_kernel_log.hpp>
 
+//构造函数：传入客户端的fd
 SrsStSocket::SrsStSocket(st_netfd_t client_stfd)
 {
     stfd = client_stfd;
+    //超时时间默认为永不超时
     send_timeout = recv_timeout = ST_UTIME_NO_TIMEOUT;
     recv_bytes = send_bytes = 0;
 }
@@ -37,6 +39,11 @@ SrsStSocket::~SrsStSocket()
 {
 }
 
+/*
+ * 超时时间相关函数
+ * 超时时间用于在st库读写时传入，决定st库读写的超时。如果没有设置超时
+ * 时间，那么默认为永不超时，即一直等待读或写。
+ * */
 bool SrsStSocket::is_never_timeout(int64_t timeout_us)
 {
     return timeout_us == (int64_t)ST_UTIME_NO_TIMEOUT;
@@ -76,7 +83,7 @@ int64_t SrsStSocket::get_send_bytes()
 int SrsStSocket::read(void* buf, size_t size, ssize_t* nread)
 {
     int ret = ERROR_SUCCESS;
-    //st_read读取
+    //st_read读取，传入recv_timeout
     ssize_t nb_read = st_read(stfd, buf, size, recv_timeout);
     if (nread) {
         *nread = nb_read;

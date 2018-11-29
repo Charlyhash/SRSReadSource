@@ -245,6 +245,7 @@ std::string srs_generate_stream_url(std::string vhost, std::string app, std::str
     return url;
 }
 
+//写大量的数据
 int srs_write_large_iovs(ISrsProtocolReaderWriter* skt, iovec* iovs, int size, ssize_t* pnwrite)
 {
     int ret = ERROR_SUCCESS;
@@ -260,6 +261,7 @@ int srs_write_large_iovs(ISrsProtocolReaderWriter* skt, iovec* iovs, int size, s
     
     // send in a time.
     if (size < limits) {
+        //调用srsStSocket
         if ((ret = skt->writev(iovs, size, pnwrite)) != ERROR_SUCCESS) {
             if (!srs_is_client_gracefully_close(ret)) {
                 srs_error("send with writev failed. ret=%d", ret);

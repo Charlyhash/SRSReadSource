@@ -168,7 +168,7 @@ int SrsPacket::encode(int& psize, char*& ppayload)
     
     return ret;
 }
-//编码
+//解码
 int SrsPacket::decode(SrsStream* stream)
 {
     int ret = ERROR_SUCCESS;
@@ -221,10 +221,10 @@ SrsProtocol::SrsProtocol(ISrsProtocolReaderWriter* io)
     skt = io; //用于读写的socket io
     //设置接收和发送chunk的大小
     in_chunk_size = SRS_CONSTS_RTMP_PROTOCOL_CHUNK_SIZE;
-    out_chunk_size = SRS_CONSTS_RTMP_PROTOCOL_CHUNK_SIZE;
+    out_chunk_size = SRS_CONSTS_RTMP_PROTOCOL_CHUNK_SIZE; //发送chunk size为128
     //chunk 通过 iovec 发送给对端，这里设置最大值
-    nb_out_iovs = SRS_CONSTS_IOVS_MAX;
-    //设置iovec缓存
+    nb_out_iovs = SRS_CONSTS_IOVS_MAX; //128*2
+    //设置发送的iovs缓存
     out_iovs = (iovec*)malloc(sizeof(iovec) * nb_out_iovs);
     // each chunk consumers atleast 2 iovs
     srs_assert(nb_out_iovs >= 2);
@@ -238,6 +238,7 @@ SrsProtocol::SrsProtocol(ISrsProtocolReaderWriter* io)
     if (SRS_PERF_CHUNK_STREAM_CACHE > 0) {
         cs_cache = new SrsChunkStream*[SRS_PERF_CHUNK_STREAM_CACHE];
     }
+    //chunk stream缓存
     for (int cid = 0; cid < SRS_PERF_CHUNK_STREAM_CACHE; cid++) {
         SrsChunkStream* cs = new SrsChunkStream(cid);
         // set the perfer cid of chunk,
@@ -252,15 +253,15 @@ SrsProtocol::~SrsProtocol()
 {
     if (true) {
         std::map<int, SrsChunkStream*>::iterator it;
-        
+
         for (it = chunk_streams.begin(); it != chunk_streams.end(); ++it) {
             SrsChunkStream* stream = it->second;
             srs_freep(stream);
         }
-    
+
         chunk_streams.clear();
     }
-    
+
     if (true) {
         std::vector<SrsPacket*>::iterator it;
         for (it = manual_response_queue.begin(); it != manual_response_queue.end(); ++it) {
@@ -269,15 +270,15 @@ SrsProtocol::~SrsProtocol()
         }
         manual_response_queue.clear();
     }
-    
+
     srs_freep(in_buffer);
-    
+
     // alloc by malloc, use free directly.
     if (out_iovs) {
         free(out_iovs);
         out_iovs = NULL;
     }
-    
+
     // free all chunk stream cache.
     for (int i = 0; i < SRS_PERF_CHUNK_STREAM_CACHE; i++) {
         SrsChunkStream* cs = cs_cache[i];
@@ -318,17 +319,20 @@ int SrsProtocol::manual_response_flush()
 }
 
 #ifdef SRS_PERF_MERGED_READ
+//设置合并读，比如一次读4K,提高读的性能
 void SrsProtocol::set_merge_read(bool v, IMergeReadHandler* handler)
 {
     in_buffer->set_merge_read(v, handler);
 }
-
+//设置接收的缓存大小：更改接收缓冲区的大小
 void SrsProtocol::set_recv_buffer(int buffer_size)
 {
     in_buffer->set_buffer(buffer_size);
 }
 #endif
-
+/*
+ * 超时时间的设置与获取，通过StSocket类设置
+ * */
 void SrsProtocol::set_recv_timeout(int64_t timeout_us)
 {
     return skt->set_recv_timeout(timeout_us);
@@ -365,7 +369,7 @@ int SrsProtocol::recv_message(SrsCommonMessage** pmsg)
     *pmsg = NULL;
     
     int ret = ERROR_SUCCESS;
-    
+    //接收一条消息
     while (true) {
         SrsCommonMessage* msg = NULL;
         //接收消息
@@ -377,7 +381,7 @@ int SrsProtocol::recv_message(SrsCommonMessage** pmsg)
             return ret;
         }
         srs_verbose("entire msg received");
-        
+        //这里说明没有读取到一条完整的消息，需要继续读取！
         if (!msg) {
             srs_info("got empty message without error.");
             continue;
@@ -390,7 +394,7 @@ int SrsProtocol::recv_message(SrsCommonMessage** pmsg)
             srs_freep(msg);
             continue;
         }
-        
+        //接收消息后做一些处理：比如需要设置chunk,需要响应对方消息
         if ((ret = on_recv_message(msg)) != ERROR_SUCCESS) {
             srs_error("hook the received msg failed. ret=%d", ret);
             srs_freep(msg);
@@ -430,52 +434,64 @@ int SrsProtocol::decode_message(SrsCommonMessage* msg, SrsPacket** ppacket)
     
     // decode the packet.
     SrsPacket* packet = NULL;
+    /// 开始解码
     if ((ret = do_decode_message(msg->header, &stream, &packet)) != ERROR_SUCCESS) {
         srs_freep(packet);
         return ret;
     }
     
     // set to output ppacket only when success.
+    /// 解码完成
     *ppacket = packet;
     
     return ret;
 }
 
+// 发送消息
 int SrsProtocol::do_send_messages(SrsSharedPtrMessage** msgs, int nb_msgs)
 {
     int ret = ERROR_SUCCESS;
     
 #ifdef SRS_PERF_COMPLEX_SEND
+    //iovs 构建的一次发送的组块，包含头部和payload
+    //由于payload较大，可能分多个iovs发送
     int iov_index = 0;
     iovec* iovs = out_iovs + iov_index;
-    
+    //c0c3缓存块
     int c0c3_cache_index = 0;
     char* c0c3_cache = out_c0c3_caches + c0c3_cache_index;
 
     // try to send use the c0c3 header cache,
     // if cache is consumed, try another loop.
-    for (int i = 0; i < nb_msgs; i++) {
+    for (int i = 0; i < nb_msgs; i++)
+    {
         SrsSharedPtrMessage* msg = msgs[i];
         
-        if (!msg) {
+        if (!msg)
+        {
             continue;
         }
     
         // ignore empty message.
-        if (!msg->payload || msg->size <= 0) {
+        if (!msg->payload || msg->size <= 0)
+        {
             srs_info("ignore empty message.");
             continue;
         }
     
         // p set to current write position,
         // it's ok when payload is NULL and size is 0.
+        //payload
         char* p = msg->payload;
         char* pend = msg->payload + msg->size;
         
         // always write the header event payload is empty.
-        while (p < pend) {
+        // 对payload构建发送的iov
+        while (p < pend)
+        {
             // always has header
             int nb_cache = SRS_CONSTS_C0C3_HEADERS_MAX - c0c3_cache_index;
+            //生成头部信息，在c0c3_cache中，nbh为头部的长度
             int nbh = msg->chunk_header(c0c3_cache, nb_cache, p == msg->payload);
             srs_assert(nbh > 0);
             
@@ -494,7 +510,9 @@ int SrsProtocol::do_send_messages(SrsSharedPtrMessage** msgs, int nb_msgs)
             // realloc the iovs if exceed,
             // for we donot know how many messges maybe to send entirely,
             // we just alloc the iovs, it's ok.
-            if (iov_index >= nb_out_iovs - 2) {
+            // 扩容nb_out_iovs
+            if (iov_index >= nb_out_iovs - 2)
+            {
                 srs_warn("resize iovs %d => %d, max_msgs=%d", 
                     nb_out_iovs, nb_out_iovs + SRS_CONSTS_IOVS_MAX, 
                     SRS_PERF_MW_MSGS);
@@ -505,18 +523,19 @@ int SrsProtocol::do_send_messages(SrsSharedPtrMessage** msgs, int nb_msgs)
             }
             
             // to next pair of iovs
-            iov_index += 2;
+            iov_index += 2; //新的iov index
             iovs = out_iovs + iov_index;
 
             // to next c0c3 header cache
-            c0c3_cache_index += nbh;
+            c0c3_cache_index += nbh; //c0c3缓存的位置
             c0c3_cache = out_c0c3_caches + c0c3_cache_index;
             
             // the cache header should never be realloc again,
             // for the ptr is set to iovs, so we just warn user to set larger
             // and use another loop to send again.
             int c0c3_left = SRS_CONSTS_C0C3_HEADERS_MAX - c0c3_cache_index;
-            if (c0c3_left < SRS_CONSTS_RTMP_MAX_FMT0_HEADER_SIZE) {
+            if (c0c3_left < SRS_CONSTS_RTMP_MAX_FMT0_HEADER_SIZE)
+            {
                 // only warn once for a connection.
                 if (!warned_c0c3_cache_dry) {
                     srs_warn("c0c3 cache header too small, recoment to %d", 
@@ -526,12 +545,14 @@ int SrsProtocol::do_send_messages(SrsSharedPtrMessage** msgs, int nb_msgs)
                 
                 // when c0c3 cache dry,
                 // sendout all messages and reset the cache, then send again.
+                //c0c3缓存用完，直接发送出去
                 if ((ret = do_iovs_send(out_iovs, iov_index)) != ERROR_SUCCESS) {
                     return ret;
                 }
     
                 // reset caches, while these cache ensure 
                 // atleast we can sendout a chunk.
+                //复位iovs和c0c3_cache
                 iov_index = 0;
                 iovs = out_iovs + iov_index;
                 
@@ -543,12 +564,13 @@ int SrsProtocol::do_send_messages(SrsSharedPtrMessage** msgs, int nb_msgs)
     
     // maybe the iovs already sendout when c0c3 cache dry,
     // so just ignore when no iovs to send.
+    // iov_index为0,没有需要发送的，直接返回
     if (iov_index <= 0) {
         return ret;
     }
     srs_info("mw %d msgs in %d iovs, max_msgs=%d, nb_out_iovs=%d",
         nb_msgs, iov_index, SRS_PERF_MW_MSGS, nb_out_iovs);
-
+    //发送iovs
     return do_iovs_send(out_iovs, iov_index);
 #else
     // try to send use the c0c3 header cache,
@@ -607,6 +629,7 @@ int SrsProtocol::do_send_messages(SrsSharedPtrMessage** msgs, int nb_msgs)
 #endif   
 }
 
+//发送iovs
 int SrsProtocol::do_iovs_send(iovec* iovs, int size)
 {
     return srs_write_large_iovs(skt, iovs, size);
@@ -676,11 +699,11 @@ int SrsProtocol::do_simple_send(SrsMessageHeader* mh, char* payload, int size)
                 c0c3, sizeof(c0c3));
         }
         srs_assert(nbh > 0);;
-        
+        //头部信息
         iovec iovs[2];
         iovs[0].iov_base = c0c3;
         iovs[0].iov_len = nbh;
-        
+        //payload
         int payload_size = srs_min(end - p, out_chunk_size);
         iovs[1].iov_base = p;
         iovs[1].iov_len = payload_size;
@@ -697,7 +720,7 @@ int SrsProtocol::do_simple_send(SrsMessageHeader* mh, char* payload, int size)
     return ret;
 }
 
-//解码
+//解码message的调用
 int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, SrsPacket** ppacket)
 {
     int ret = ERROR_SUCCESS;
@@ -706,6 +729,7 @@ int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, 
     
     // decode specified packet type
     //确认解码的类型
+    //amf0和amf3
     if (header.is_amf0_command() || header.is_amf3_command() || header.is_amf0_data() || header.is_amf3_data()) {
         srs_verbose("start to decode AMF0/AMF3 command message.");
         
@@ -718,7 +742,7 @@ int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, 
         // amf0 command message.
         // need to read the command name.
         std::string command;
-        //读取string类型，得到command
+        //读取string类型，得到command名字
         if ((ret = srs_amf0_read_string(stream, command)) != ERROR_SUCCESS) {
             srs_error("decode AMF0/AMF3 command name failed. ret=%d", ret);
             return ret;
@@ -750,7 +774,7 @@ int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, 
             //得到请求的名字
             std::string request_name = requests[transactionId];
             srs_verbose("AMF0/AMF3 request parsed. request_name=%s", request_name.c_str());
-            //根据请求的名字得到packet。交给每一种具体的packet去解码
+            //根据请求的名字得到packet。交给每一个具体的packet去解码
             if (request_name == RTMP_AMF0_COMMAND_CONNECT) {
                 srs_info("decode the AMF0/AMF3 response command(%s message).", request_name.c_str());
                 *ppacket = packet = new SrsConnectAppResPacket();
@@ -868,11 +892,13 @@ int SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsStream* stream, 
     return ret;
 }
 
+//发送消息并释放msg
 int SrsProtocol::send_and_free_message(SrsSharedPtrMessage* msg, int stream_id)
 {
     return send_and_free_messages(&msg, 1, stream_id);
 }
 
+//发送消息，数量为1
 int SrsProtocol::send_and_free_messages(SrsSharedPtrMessage** msgs, int nb_msgs, int stream_id)
 {
     // always not NULL msg.
@@ -880,6 +906,7 @@ int SrsProtocol::send_and_free_messages(SrsSharedPtrMessage** msgs, int nb_msgs,
     srs_assert(nb_msgs > 0);
     
     // update the stream id in header.
+    //更新消息头的stream id
     for (int i = 0; i < nb_msgs; i++) {
         SrsSharedPtrMessage* msg = msgs[i];
         
@@ -896,8 +923,9 @@ int SrsProtocol::send_and_free_messages(SrsSharedPtrMessage** msgs, int nb_msgs,
     
     // donot use the auto free to free the msg,
     // for performance issue.
+    //发送消息
     int ret = do_send_messages(msgs, nb_msgs);
-    
+    // 释放msg
     for (int i = 0; i < nb_msgs; i++) {
         SrsSharedPtrMessage* msg = msgs[i];
         srs_freep(msg);
@@ -909,6 +937,7 @@ int SrsProtocol::send_and_free_messages(SrsSharedPtrMessage** msgs, int nb_msgs,
     }
     
     // flush messages in manual queue
+    //发送缓存中的响应消息
     if ((ret = manual_response_flush()) != ERROR_SUCCESS) {
         return ret;
     }
@@ -942,6 +971,7 @@ int SrsProtocol::recv_interlaced_message(SrsCommonMessage** pmsg)
     // chunk stream basic header.
     char fmt = 0;
     int cid = 0;
+    //读取头部
     if ((ret = read_basic_header(fmt, cid)) != ERROR_SUCCESS) {
         if (ret != ERROR_SOCKET_TIMEOUT && !srs_is_client_gracefully_close(ret)) {
             srs_error("read basic header failed. ret=%d", ret);
@@ -958,6 +988,7 @@ int SrsProtocol::recv_interlaced_message(SrsCommonMessage** pmsg)
     
     // use chunk stream cache to get the chunk info.
     // @see https://github.com/ossrs/srs/issues/249
+    //查看是否有cid缓存
     if (cid < SRS_PERF_CHUNK_STREAM_CACHE) {
         // chunk stream cache hit.
         srs_verbose("cs-cache hit, cid=%d", cid);
@@ -969,9 +1000,11 @@ int SrsProtocol::recv_interlaced_message(SrsCommonMessage** pmsg)
     } else {
         // chunk stream cache miss, use map.
         if (chunk_streams.find(cid) == chunk_streams.end()) {
+            //创建chunk stream
             chunk = chunk_streams[cid] = new SrsChunkStream(cid);
             // set the perfer cid of chunk,
             // which will copy to the message received.
+            //设置prefer cid
             chunk->header.perfer_cid = cid;
             srs_verbose("cache new chunk stream: fmt=%d, cid=%d", fmt, cid);
         } else {
@@ -982,7 +1015,7 @@ int SrsProtocol::recv_interlaced_message(SrsCommonMessage** pmsg)
         }
     }
 
-    // chunk stream message header
+    // 读取消息头
     if ((ret = read_message_header(chunk, fmt)) != ERROR_SUCCESS) {
         if (ret != ERROR_SOCKET_TIMEOUT && !srs_is_client_gracefully_close(ret)) {
             srs_error("read message header failed. ret=%d", ret);
@@ -995,6 +1028,7 @@ int SrsProtocol::recv_interlaced_message(SrsCommonMessage** pmsg)
             chunk->header.payload_length, chunk->header.timestamp, chunk->header.stream_id);
     
     // read msg payload from chunk stream.
+    // 读取payload
     SrsCommonMessage* msg = NULL;
     if ((ret = read_message_payload(chunk, &msg)) != ERROR_SUCCESS) {
         if (ret != ERROR_SOCKET_TIMEOUT && !srs_is_client_gracefully_close(ret)) {
@@ -1010,7 +1044,7 @@ int SrsProtocol::recv_interlaced_message(SrsCommonMessage** pmsg)
                 chunk->header.timestamp, chunk->header.stream_id);
         return ret;
     }
-    
+    // 获取消息
     *pmsg = msg;
     srs_info("get entire message success. size=%d, message(type=%d, size=%d, time=%"PRId64", sid=%d)",
             (msg? msg->size : (chunk->msg? chunk->msg->size : 0)), chunk->header.message_type, chunk->header.payload_length,
@@ -1073,18 +1107,18 @@ int SrsProtocol::read_basic_header(char& fmt, int& cid)
         }
         return ret;
     }
+
+    fmt = in_buffer->read_1byte();//读1个字节
+    cid = fmt & 0x3f; //cid后6为
+    fmt = (fmt >> 6) & 0x03; //fmt是前两位
     
-    fmt = in_buffer->read_1byte();
-    cid = fmt & 0x3f;
-    fmt = (fmt >> 6) & 0x03;
-    
-    // 2-63, 1B chunk header
+    // cid > 1, 说明为类型1的头部，以获取cid和fmt
     if (cid > 1) {
         srs_verbose("basic header parsed. fmt=%d, cid=%d", fmt, cid);
         return ret;
     }
 
-    // 64-319, 2B chunk header
+    // cid=0, 说明为类型2的头部
     if (cid == 0) {
         if ((ret = in_buffer->grow(skt, 1)) != ERROR_SUCCESS) {
             if (ret != ERROR_SOCKET_TIMEOUT && !srs_is_client_gracefully_close(ret)) {
@@ -1094,9 +1128,10 @@ int SrsProtocol::read_basic_header(char& fmt, int& cid)
         }
         
         cid = 64;
+        //cid为后面的一位+64
         cid += (u_int8_t)in_buffer->read_1byte();
         srs_verbose("2bytes basic header parsed. fmt=%d, cid=%d", fmt, cid);
-    // 64-65599, 3B chunk header
+    // cid=1,说明就为类型3头部
     } else if (cid == 1) {
         if ((ret = in_buffer->grow(skt, 2)) != ERROR_SUCCESS) {
             if (ret != ERROR_SOCKET_TIMEOUT && !srs_is_client_gracefully_close(ret)) {
@@ -1104,7 +1139,7 @@ int SrsProtocol::read_basic_header(char& fmt, int& cid)
             }
             return ret;
         }
-        
+        //cid
         cid = 64;
         cid += (u_int8_t)in_buffer->read_1byte();
         cid += ((u_int8_t)in_buffer->read_1byte()) * 256;
@@ -1156,10 +1191,11 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
     */
     // fresh packet used to update the timestamp even fmt=3 for first packet.
     // fresh packet always means the chunk is the first one of message.
-    bool is_first_chunk_of_msg = !chunk->msg;
+    bool is_first_chunk_of_msg = !chunk->msg; //判断是否是第一个packet
     
     // but, we can ensure that when a chunk stream is fresh, 
     // the fmt must be 0, a new stream.
+    //若当前chunk是消息中的第一个chunk时，当前的chunk的fmt必须是0
     if (chunk->msg_count == 0 && fmt != RTMP_FMT_TYPE0) {
         // for librtmp, if ping, it will send a fresh stream with fmt=1,
         // 0x42             where: fmt=1, cid=2, protocol contorl user-control message
@@ -1189,15 +1225,15 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
         return ret;
     }
     
-    // create msg when new chunk stream start
+    // 创建message
     if (!chunk->msg) {
         chunk->msg = new SrsCommonMessage();
         srs_verbose("create message for new chunk, fmt=%d, cid=%d", fmt, chunk->cid);
     }
 
-    // read message header from socket to buffer.
+    // 读取消息头部
     static char mh_sizes[] = {11, 7, 3, 0};
-    int mh_size = mh_sizes[(int)fmt];
+    int mh_size = mh_sizes[(int)fmt]; //转为message header的长度
     srs_verbose("calc chunk message header size. fmt=%d, mh_size=%d", fmt, mh_size);
     
     if (mh_size > 0 && (ret = in_buffer->grow(skt, mh_size)) != ERROR_SUCCESS) {
@@ -1221,8 +1257,9 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
     */
     // see also: ngx_rtmp_recv
     if (fmt <= RTMP_FMT_TYPE2) {
+        //读取缓冲区
         char* p = in_buffer->read_slice(mh_size);
-    
+        //1. timestamp 3字节
         char* pp = (char*)&chunk->header.timestamp_delta;
         pp[2] = *p++;
         pp[1] = *p++;
@@ -1242,6 +1279,7 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
         // 0x00ffffff), this value MUST be 16777215, and the 'extended
         // timestamp header' MUST be present. Otherwise, this value SHOULD be
         // the entire delta.
+        //2. 判断timestamp是为最大值0x00ffffff，如果达到0x00ffffff,使用扩展的timestamp
         chunk->extended_timestamp = (chunk->header.timestamp_delta >= RTMP_EXTENDED_TIMESTAMP);
         if (!chunk->extended_timestamp) {
             // Extended timestamp: 0 or 4 bytes
@@ -1256,16 +1294,18 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
                 // 6.1.2.1. Type 0
                 // For a type-0 chunk, the absolute timestamp of the message is sent
                 // here.
+                // type0，绝对时间戳
                 chunk->header.timestamp = chunk->header.timestamp_delta;
             } else {
                 // 6.1.2.2. Type 1
                 // 6.1.2.3. Type 2
                 // For a type-1 or type-2 chunk, the difference between the previous
                 // chunk's timestamp and the current chunk's timestamp is sent here.
+                // type1,type2相对时间戳
                 chunk->header.timestamp += chunk->header.timestamp_delta;
             }
         }
-        
+        // 3. type0, type1 解析payload的长度，3个字节
         if (fmt <= RTMP_FMT_TYPE1) {
             int32_t payload_length = 0;
             pp = (char*)&payload_length;
@@ -1278,6 +1318,7 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
             // always use the actual msg size to compare, for the cache payload length can changed,
             // for the fmt type1(stream_id not changed), user can change the payload 
             // length(it's not allowed in the continue chunks).
+            //type1 payload不能改变。因为type1的块应该是和前一个块stream id一样
             if (!is_first_chunk_of_msg && chunk->header.payload_length != payload_length) {
                 ret = ERROR_RTMP_PACKET_SIZE;
                 srs_error("msg exists in chunk cache, "
@@ -1285,10 +1326,11 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
                     chunk->header.payload_length, payload_length, ret);
                 return ret;
             }
-            
+            //payload
             chunk->header.payload_length = payload_length;
+            //4. message type值，1个字节
             chunk->header.message_type = *p++;
-            
+            //5. type0, message stream id, 4字节
             if (fmt == RTMP_FMT_TYPE0) {
                 pp = (char*)&chunk->header.stream_id;
                 pp[0] = *p++;
@@ -1309,6 +1351,7 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
         }
     } else {
         // update the timestamp even fmt=3 for first chunk packet
+        // type3 更新timesatmp
         if (is_first_chunk_of_msg && !chunk->extended_timestamp) {
             chunk->header.timestamp += chunk->header.timestamp_delta;
         }
@@ -1317,6 +1360,7 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
     }
     
     // read extended-timestamp
+    // extend timestamp
     if (chunk->extended_timestamp) {
         mh_size += 4;
         srs_verbose("read header ext time. fmt=%d, ext_time=%d, mh_size=%d", fmt, chunk->extended_timestamp, mh_size);
@@ -1328,6 +1372,7 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
         }
         // the ptr to the slice maybe invalid when grow()
         // reset the p to get 4bytes slice.
+        //extend timestamp, 4字节
         char* p = in_buffer->read_slice(4);
 
         u_int32_t timestamp = 0x00;
@@ -1368,6 +1413,7 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
         * about the is_first_chunk_of_msg.
         * @remark, for the first chunk of message, always use the extended timestamp.
         */
+        //没有用到扩展时间戳
         if (!is_first_chunk_of_msg && chunk_timestamp > 0 && chunk_timestamp != timestamp) {
             mh_size -= 4;
             in_buffer->skip(-4);
@@ -1398,6 +1444,8 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
     //        milliseconds.
     // in a word, 31bits timestamp is ok.
     // convert extended timestamp to 31bits.
+
+    //使用31位时间戳
     chunk->header.timestamp &= 0x7fffffff;
     
     // valid message, the payload_length is 24bits,
@@ -1405,9 +1453,11 @@ int SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
     srs_assert(chunk->header.payload_length >= 0);
     
     // copy header to msg
+    //复制到message
     chunk->msg->header = chunk->header;
     
     // increase the msg count, the chunk stream can accept fmt=1/2/3 message now.
+    //message+1
     chunk->msg_count++;
     
     return ret;
@@ -1429,14 +1479,16 @@ int SrsProtocol::read_message_payload(SrsChunkStream* chunk, SrsCommonMessage** 
         return ret;
     }
     srs_assert(chunk->header.payload_length > 0);
-    
+
     // the chunk payload size.
+    //payload大小。一个message可能有多个chunk, 减去已经解析了的大小
     int payload_size = chunk->header.payload_length - chunk->msg->size;
     payload_size = srs_min(payload_size, in_chunk_size);
     srs_verbose("chunk payload size is %d, message_size=%d, received_size=%d, in_chunk_size=%d", 
         payload_size, chunk->header.payload_length, chunk->msg->size, in_chunk_size);
 
     // create msg payload if not initialized
+    // 创建payload
     if (!chunk->msg->payload) {
         chunk->msg->create_payload(chunk->header.payload_length);
     }
@@ -1448,14 +1500,18 @@ int SrsProtocol::read_message_payload(SrsChunkStream* chunk, SrsCommonMessage** 
         }
         return ret;
     }
+    //从buffer读取payload
     memcpy(chunk->msg->payload + chunk->msg->size, in_buffer->read_slice(payload_size), payload_size);
     chunk->msg->size += payload_size;
     
     srs_verbose("chunk payload read completed. payload_size=%d", payload_size);
     
     // got entire RTMP message?
+    //判断是否读取一条message
     if (chunk->header.payload_length == chunk->msg->size) {
+        // 保存读取的message
         *pmsg = chunk->msg;
+        //清理
         chunk->msg = NULL;
         srs_verbose("get entire RTMP message(type=%d, size=%d, time=%"PRId64", sid=%d)", 
                 chunk->header.message_type, chunk->header.payload_length, 
@@ -1471,6 +1527,7 @@ int SrsProtocol::read_message_payload(SrsChunkStream* chunk, SrsCommonMessage** 
     return ret;
 }
 
+//接收消息的回调
 int SrsProtocol::on_recv_message(SrsCommonMessage* msg)
 {
     int ret = ERROR_SUCCESS;
@@ -1478,6 +1535,7 @@ int SrsProtocol::on_recv_message(SrsCommonMessage* msg)
     srs_assert(msg != NULL);
         
     // try to response acknowledgement
+    //是否发送acknowledgement
     if ((ret = response_acknowledgement_message()) != ERROR_SUCCESS) {
         return ret;
     }
@@ -1487,6 +1545,7 @@ int SrsProtocol::on_recv_message(SrsCommonMessage* msg)
         case RTMP_MSG_SetChunkSize:
         case RTMP_MSG_UserControlMessage:
         case RTMP_MSG_WindowAcknowledgementSize:
+            //解码
             if ((ret = decode_message(msg, &packet)) != ERROR_SUCCESS) {
                 srs_error("decode packet from message payload failed. ret=%d", ret);
                 return ret;
@@ -1495,6 +1554,7 @@ int SrsProtocol::on_recv_message(SrsCommonMessage* msg)
             break;
         case RTMP_MSG_VideoMessage:
         case RTMP_MSG_AudioMessage:
+            //打印调试信息
             print_debug_info();
         default:
             return ret;
@@ -1506,6 +1566,7 @@ int SrsProtocol::on_recv_message(SrsCommonMessage* msg)
     SrsAutoFree(SrsPacket, packet);
     
     switch (msg->header.message_type) {
+        //接收消息类型为窗口确认大小(5)
         case RTMP_MSG_WindowAcknowledgementSize: {
             SrsSetWindowAckSizePacket* pkt = dynamic_cast<SrsSetWindowAckSizePacket*>(packet);
             srs_assert(pkt != NULL);
@@ -1521,6 +1582,7 @@ int SrsProtocol::on_recv_message(SrsCommonMessage* msg)
             }
             break;
         }
+        //设置chunk size消息
         case RTMP_MSG_SetChunkSize: {
             SrsSetChunkSizePacket* pkt = dynamic_cast<SrsSetChunkSizePacket*>(packet);
             srs_assert(pkt != NULL);
@@ -1548,15 +1610,17 @@ int SrsProtocol::on_recv_message(SrsCommonMessage* msg)
 
             break;
         }
+        //用户控制消息
         case RTMP_MSG_UserControlMessage: {
             SrsUserControlPacket* pkt = dynamic_cast<SrsUserControlPacket*>(packet);
             srs_assert(pkt != NULL);
-            
+            //SrcPCUCSetBufferLength：修改chunk大小
             if (pkt->event_type == SrcPCUCSetBufferLength) {
                 in_buffer_length = pkt->extra_data;
                 srs_info("buffer=%d, in.ack=%d, out.ack=%d, in.chunk=%d, out.chunk=%d", pkt->extra_data,
                     in_ack_size.window, out_ack_size.window, in_chunk_size, out_chunk_size);
             }
+            //Ping:响应Ping消息
             if (pkt->event_type == SrcPCUCPingRequest) {
                 if ((ret = response_ping_message(pkt->event_data)) != ERROR_SUCCESS) {
                     return ret;
@@ -1627,10 +1691,11 @@ int SrsProtocol::on_send_packet(SrsMessageHeader* mh, SrsPacket* packet)
     return ret;
 }
 
+//是否发送 acknowledgement
 int SrsProtocol::response_acknowledgement_message()
 {
     int ret = ERROR_SUCCESS;
-    
+    //未设置窗口大小，直接返回
     if (in_ack_size.window <= 0) {
         return ret;
     }
@@ -1640,6 +1705,7 @@ int SrsProtocol::response_acknowledgement_message()
     if (delta < in_ack_size.window / 2) {
         return ret;
     }
+    //接收到的字节数
     in_ack_size.nb_recv_bytes = skt->get_recv_bytes();
     
     // when the sequence number overflow, reset it.
@@ -1648,7 +1714,7 @@ int SrsProtocol::response_acknowledgement_message()
         sequence_number = delta;
     }
     in_ack_size.sequence_number = sequence_number;
-    
+    //sequence_number为当前为止收到的字节数
     SrsAcknowledgementPacket* pkt = new SrsAcknowledgementPacket();
     pkt->sequence_number = sequence_number;
     
@@ -1993,7 +2059,7 @@ SrsRtmpClient::SrsRtmpClient(ISrsProtocolReaderWriter* skt)
 {
     io = skt; //读写的io
     protocol = new SrsProtocol(skt); //用于读写
-    hs_bytes = new SrsHandshakeBytes();
+    hs_bytes = new SrsHandshakeBytes(); //用于握手
 }
 
 SrsRtmpClient::~SrsRtmpClient()
@@ -2125,7 +2191,7 @@ int SrsRtmpClient::connect_app(string app, string tc_url, SrsRequest* req, bool 
         srs_version, srs_id, srs_pid);
 }
 
-//连接大服务器
+//连接到服务器
 int SrsRtmpClient::connect_app2(
     string app, string tc_url, SrsRequest* req, bool debug_srs_upnode,
     string& srs_server_ip, string& srs_server, string& srs_primary,
@@ -2229,6 +2295,7 @@ int SrsRtmpClient::connect_app2(
     return ret;
 }
 
+//创建流
 int SrsRtmpClient::create_stream(int& stream_id)
 {
     int ret = ERROR_SUCCESS;
@@ -2259,6 +2326,7 @@ int SrsRtmpClient::create_stream(int& stream_id)
     return ret;
 }
 
+//播放
 int SrsRtmpClient::play(string stream, int stream_id)
 {
     int ret = ERROR_SUCCESS;
@@ -2307,6 +2375,7 @@ int SrsRtmpClient::play(string stream, int stream_id)
     return ret;
 }
 
+//publish
 int SrsRtmpClient::publish(string stream, int stream_id)
 {
     int ret = ERROR_SUCCESS;
@@ -2717,7 +2786,7 @@ int SrsRtmpServer::identify_client(int stream_id, SrsRtmpConnType& type, string&
         }
         
         SrsAutoFree(SrsPacket, pkt);
-        
+        //类型转换成对应的packet,转换成功，则为对应的客户端类型
         if (dynamic_cast<SrsCreateStreamPacket*>(pkt)) {
             srs_info("identify client by create stream, play or flash publish.");
             return identify_create_stream_client(dynamic_cast<SrsCreateStreamPacket*>(pkt), stream_id, type, stream_name, duration);
@@ -3305,26 +3374,26 @@ int SrsRtmpServer::identify_play_client(SrsPlayPacket* req, SrsRtmpConnType& typ
     return ret;
 }
 
-//
+//构造函数
 SrsConnectAppPacket::SrsConnectAppPacket()
 {
     command_name = RTMP_AMF0_COMMAND_CONNECT;
     transaction_id = 1;
-    command_object = SrsAmf0Any::object();
+    command_object = SrsAmf0Any::object(); //创建一个object
     // optional
     args = NULL;
 }
-
+//析构函数
 SrsConnectAppPacket::~SrsConnectAppPacket()
 {
     srs_freep(command_object);
     srs_freep(args);
 }
-
+//解码
 int SrsConnectAppPacket::decode(SrsStream* stream)
 {
     int ret = ERROR_SUCCESS;
-
+    //读一个string, 应该是connect
     if ((ret = srs_amf0_read_string(stream, command_name)) != ERROR_SUCCESS) {
         srs_error("amf0 decode connect command_name failed. ret=%d", ret);
         return ret;
@@ -3335,7 +3404,7 @@ int SrsConnectAppPacket::decode(SrsStream* stream)
             "command_name=%s, ret=%d", command_name.c_str(), ret);
         return ret;
     }
-    
+    //transaction id
     if ((ret = srs_amf0_read_number(stream, transaction_id)) != ERROR_SUCCESS) {
         srs_error("amf0 decode connect transaction_id failed. ret=%d", ret);
         return ret;
@@ -3411,22 +3480,23 @@ int SrsConnectAppPacket::get_size()
     return size;
 }
 
+//编码
 int SrsConnectAppPacket::encode_packet(SrsStream* stream)
 {
     int ret = ERROR_SUCCESS;
-    
+    ///写入字符串
     if ((ret = srs_amf0_write_string(stream, command_name)) != ERROR_SUCCESS) {
         srs_error("encode command_name failed. ret=%d", ret);
         return ret;
     }
     srs_verbose("encode command_name success.");
-    
+    ///写入数字
     if ((ret = srs_amf0_write_number(stream, transaction_id)) != ERROR_SUCCESS) {
         srs_error("encode transaction_id failed. ret=%d", ret);
         return ret;
     }
     srs_verbose("encode transaction_id success.");
-    
+    ///
     if ((ret = command_object->write(stream)) != ERROR_SUCCESS) {
         srs_error("encode command_object failed. ret=%d", ret);
         return ret;
@@ -5336,7 +5406,7 @@ int SrsSetPeerBandwidthPacket::get_size()
 {
     return 5;
 }
-
+//编码set peer bandwidth
 int SrsSetPeerBandwidthPacket::encode_packet(SrsStream* stream)
 {
     int ret = ERROR_SUCCESS;

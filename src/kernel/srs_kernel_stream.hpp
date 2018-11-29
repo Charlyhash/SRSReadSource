@@ -38,14 +38,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 * convert basic types to bytes,
 * build basic types from bytes.
 */
-//用于流的读写，一个流是时一串数据，需要转换为byte数据
+//用于流的读写，一个流是一串数据，需要转换为byte数据
 class SrsStream
 {
 private:
     // current position at bytes.
     char* p; //当前指针
     // the bytes data for stream to read or write.
-    char* bytes; //读写的字节数
+    char* bytes; //读或写的字节数
     // the total number of bytes.
     int nb_bytes; //总的字节数
 public:

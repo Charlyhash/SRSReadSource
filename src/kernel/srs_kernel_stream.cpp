@@ -42,6 +42,7 @@ SrsStream::~SrsStream()
 {
 }
 
+//初始化
 int SrsStream::initialize(char* b, int nb)
 {
     int ret = ERROR_SUCCESS;
